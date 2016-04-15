@@ -22,38 +22,52 @@ struct invalid_params { };
 
 class StepRow
 {
-private:
+protected:
     unsigned char* hash;
     unsigned int len;
-    std::vector<eh_index> indices;
 
 public:
     StepRow(unsigned int n, const eh_HashState& base_state, eh_index i);
     ~StepRow();
 
     StepRow(const StepRow& a);
-    StepRow& operator=(const StepRow& a);
-    StepRow& operator^=(const StepRow& a);
 
     void TrimHash(int l);
     bool IsZero();
-    bool IndicesBefore(const StepRow& a) { return indices[0] < a.indices[0]; }
-    std::vector<eh_index> GetSolution() { return std::vector<eh_index>(indices); }
-    std::string GetHex() { return HexStr(hash, hash+len); }
-
-    friend inline const StepRow operator^(const StepRow& a, const StepRow& b) {
-        if (a.indices[0] < b.indices[0]) { return StepRow(a) ^= b; }
-        else { return StepRow(b) ^= a; }
-    }
-    friend inline bool operator==(const StepRow& a, const StepRow& b) { return memcmp(a.hash, b.hash, a.len) == 0; }
-    friend inline bool operator<(const StepRow& a, const StepRow& b) { return memcmp(a.hash, b.hash, a.len) < 0; }
 
     friend bool HasCollision(StepRow& a, StepRow& b, int l);
-    friend bool DistinctIndices(const StepRow& a, const StepRow& b);
 };
 
 bool HasCollision(StepRow& a, StepRow& b, int l);
-bool DistinctIndices(const StepRow& a, const StepRow& b);
+template<typename INDEX_TYPE>
+bool DistinctIndices(const std::vector<INDEX_TYPE>& a, const std::vector<INDEX_TYPE>& b);
+
+class BasicStepRow : public StepRow
+{
+private:
+    std::vector<eh_index> indices;
+
+public:
+    BasicStepRow(unsigned int n, const eh_HashState& base_state, eh_index i);
+    ~BasicStepRow() { }
+
+    BasicStepRow(const BasicStepRow& a);
+    BasicStepRow& operator=(const BasicStepRow& a);
+    BasicStepRow& operator^=(const BasicStepRow& a);
+
+    bool IndicesBefore(const BasicStepRow& a) { return indices[0] < a.indices[0]; }
+    std::vector<eh_index> GetSolution() { return std::vector<eh_index>(indices); }
+    std::string GetHex() { return HexStr(hash, hash+len); }
+
+    friend inline const BasicStepRow operator^(const BasicStepRow& a, const BasicStepRow& b) {
+        if (a.indices[0] < b.indices[0]) { return BasicStepRow(a) ^= b; }
+        else { return BasicStepRow(b) ^= a; }
+    }
+    friend inline bool operator==(const BasicStepRow& a, const BasicStepRow& b) { return memcmp(a.hash, b.hash, a.len) == 0; }
+    friend inline bool operator<(const BasicStepRow& a, const BasicStepRow& b) { return memcmp(a.hash, b.hash, a.len) < 0; }
+
+    friend inline bool DistinctIndices(const BasicStepRow& a, const BasicStepRow& b) { return DistinctIndices(a.indices, b.indices); }
+};
 
 class Equihash
 {
