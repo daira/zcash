@@ -74,6 +74,7 @@ class TruncatedStepRow : public StepRow
 {
 private:
     std::vector<eh_trunc> indices;
+    std::vector<eh_index> full_indices;
 
 public:
     TruncatedStepRow(unsigned int n, const eh_HashState& base_state, eh_index i, unsigned int ilen);

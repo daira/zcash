@@ -311,13 +311,17 @@ TruncatedStepRow::TruncatedStepRow(unsigned int n, const eh_HashState& base_stat
 
     indices.reserve(1);
     indices.push_back(itrunc);
+    full_indices.reserve(1);
+    full_indices.push_back(i);
 
     assert(indices.size() == 1);
+    assert(full_indices.size() == 1);
 }
 
 TruncatedStepRow::TruncatedStepRow(const TruncatedStepRow& a) :
         StepRow {a},
-        indices(a.indices)
+        indices(a.indices),
+        full_indices(a.full_indices)
 {
 }
 
@@ -330,6 +334,7 @@ TruncatedStepRow& TruncatedStepRow::operator=(const TruncatedStepRow& a)
     hash = p;
     len = a.len;
     indices = a.indices;
+    full_indices = a.full_indices;
     return *this;
 }
 
@@ -348,6 +353,8 @@ TruncatedStepRow& TruncatedStepRow::operator^=(const TruncatedStepRow& a)
     hash = p;
     indices.reserve(indices.size() + a.indices.size());
     indices.insert(indices.end(), a.indices.begin(), a.indices.end());
+    full_indices.reserve(full_indices.size() + a.full_indices.size());
+    full_indices.insert(full_indices.end(), a.full_indices.begin(), a.full_indices.end());
     return *this;
 }
 
