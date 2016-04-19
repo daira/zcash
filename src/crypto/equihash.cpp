@@ -295,3 +295,243 @@ bool Equihash::IsValidSolution(const eh_HashState& base_state, std::vector<eh_in
     assert(X.size() == 1);
     return X[0].IsZero();
 }
+
+
+//
+// OPTIMISATIONS BELOW HERE
+//
+
+
+TruncatedStepRow::TruncatedStepRow(unsigned int n, const eh_HashState& base_state, eh_index i, unsigned int ilen) :
+        StepRow {n, base_state, i}
+{
+    // Truncate to 8 bits
+    assert(sizeof(eh_trunc) == 1);
+    eh_trunc itrunc { (i >> (ilen - 8)) & 0xff };
+
+    indices.reserve(1);
+    indices.push_back(itrunc);
+
+    assert(indices.size() == 1);
+}
+
+TruncatedStepRow::TruncatedStepRow(const TruncatedStepRow& a) :
+        StepRow {a},
+        indices(a.indices)
+{
+}
+
+TruncatedStepRow& TruncatedStepRow::operator=(const TruncatedStepRow& a)
+{
+    unsigned char* p = new unsigned char[a.len];
+    for (int i = 0; i < a.len; i++)
+        p[i] = a.hash[i];
+    delete[] hash;
+    hash = p;
+    len = a.len;
+    indices = a.indices;
+    return *this;
+}
+
+TruncatedStepRow& TruncatedStepRow::operator^=(const TruncatedStepRow& a)
+{
+    if (a.len != len) {
+        throw std::invalid_argument("Hash length differs");
+    }
+    if (a.indices.size() != indices.size()) {
+        throw std::invalid_argument("Number of indices differs");
+    }
+    unsigned char* p = new unsigned char[len];
+    for (int i = 0; i < len; i++)
+        p[i] = hash[i] ^ a.hash[i];
+    delete[] hash;
+    hash = p;
+    indices.reserve(indices.size() + a.indices.size());
+    indices.insert(indices.end(), a.indices.begin(), a.indices.end());
+    return *this;
+}
+
+std::set<std::vector<eh_index>> Equihash::OptimisedSolve(const eh_HashState& base_state)
+{
+    assert(CollisionBitLength() + 1 < 8*sizeof(eh_index));
+    eh_index init_size { ((eh_index) 1) << (CollisionBitLength() + 1) };
+
+    // First run the algorithm with truncated indices
+
+    // 1) Generate first list
+    LogPrint("pow", "Generating first list\n");
+    std::vector<TruncatedStepRow> Xt;
+    Xt.reserve(init_size);
+    for (eh_index i = 0; i < init_size; i++) {
+        Xt.emplace_back(n, base_state, i, CollisionBitLength() + 1);
+    }
+
+    // 3) Repeat step 2 until 2n/(k+1) bits remain
+    for (int r = 1; r < k && Xt.size() > 0; r++) {
+        LogPrint("pow", "Round %d:\n", r);
+        // 2a) Sort the list
+        LogPrint("pow", "- Sorting list\n");
+        std::sort(Xt.begin(), Xt.end());
+
+        LogPrint("pow", "- Finding collisions\n");
+        int i = 0;
+        int posFree = 0;
+        std::vector<TruncatedStepRow> Xc;
+        while (i < Xt.size() - 1) {
+            // 2b) Find next set of unordered pairs with collisions on the next n/(k+1) bits
+            int j = 1;
+            while (i+j < Xt.size() &&
+                    HasCollision(Xt[i], Xt[i+j], CollisionByteLength())) {
+                j++;
+            }
+
+            // 2c) Calculate tuples (X_i ^ X_j, (i, j))
+            for (int l = 0; l < j - 1; l++) {
+                for (int m = l + 1; m < j; m++) {
+                    // We truncated, so don't check for distinct indices here
+                    Xc.push_back(Xt[i+l] ^ Xt[i+m]);
+                    Xc.back().TrimHash(CollisionByteLength());
+                }
+            }
+
+            // 2d) Store tuples on the table in-place if possible
+            while (posFree < i+j && Xc.size() > 0) {
+                Xt[posFree++] = Xc.back();
+                Xc.pop_back();
+            }
+
+            i += j;
+        }
+
+        // 2e) Handle edge case where final table entry has no collision
+        while (posFree < Xt.size() && Xc.size() > 0) {
+            Xt[posFree++] = Xc.back();
+            Xc.pop_back();
+        }
+
+        if (Xc.size() > 0) {
+            // 2f) Add overflow to end of table
+            Xt.insert(Xt.end(), Xc.begin(), Xc.end());
+        } else if (posFree < Xt.size()) {
+            // 2g) Remove empty space at the end
+            Xt.erase(Xt.begin()+posFree, Xt.end());
+            Xt.shrink_to_fit();
+        }
+    }
+
+    // k+1) Find a collision on last 2n(k+1) bits
+    LogPrint("pow", "Final round:\n");
+    std::set<std::vector<eh_trunc>> partialSolns;
+    if (Xt.size() > 1) {
+        LogPrint("pow", "- Sorting list\n");
+        std::sort(Xt.begin(), Xt.end());
+        LogPrint("pow", "- Finding collisions\n");
+        for (int i = 0; i < Xt.size() - 1; i++) {
+            TruncatedStepRow res = Xt[i] ^ Xt[i+1];
+            if (res.IsZero() && DistinctIndices(Xt[i], Xt[i+1])) {
+                partialSolns.insert(res.GetPartialSolution());
+            }
+        }
+    } else
+        LogPrint("pow", "- List is empty\n");
+
+    LogPrint("pow", "Found %d partial solutions\n", partialSolns.size());
+
+    // Now for each solution run the algorithm again to recreate the indices
+    std::set<std::vector<eh_index>> solns;
+    eh_index recreate_size { ((eh_index) 1) << (CollisionBitLength() - 7) };
+
+    for (std::vector<eh_trunc> partialSoln : partialSolns) {
+        LogPrint("pow", "Solution: ");
+        for (eh_trunc index : partialSoln) {
+            LogPrint("pow", "%d,", index);
+        }
+        LogPrint("pow", "\n");
+
+        // 1) Generate first list of possibilities
+        LogPrint("pow", "Generating first list of possibilities\n");
+        LogPrint("pow", "- partialSoln.size() = %d\n", partialSoln.size());
+        std::vector<std::vector<BasicStepRow>> X;
+        X.reserve(partialSoln.size());
+        for (int i = 0; i < partialSoln.size(); i++) {
+            std::vector<BasicStepRow> ic;
+            ic.reserve(recreate_size);
+            for (eh_index j = 0; j < recreate_size; j++) {
+                ic.emplace_back(n, base_state, (partialSoln[i] << recreate_size) | j);
+            }
+            X.push_back(ic);
+        }
+
+        // 3) Repeat step 2 for each level of the tree
+        while (X.size() > 1) {
+            LogPrint("pow", "X.size() = %d:\n", X.size());
+
+            // For each list:
+            for (int v = 0; v < X.size(); v++) {
+                LogPrint("pow", "- List %d size = %d:\n", v+1, X[v].size());
+                if (X[v].size() == 0) continue;
+
+                // 2a) Sort the list
+                LogPrint("pow", "  - Sorting list\n");
+                std::sort(X[v].begin(), X[v].end());
+            }
+
+            std::vector<std::vector<BasicStepRow>> Xc;
+            Xc.reserve(X.size()/2);
+
+            // For each pair of lists:
+            for (int v = 0; v < X.size(); v += 2) {
+                LogPrint("pow", "- Pair %d:\n", (v/2)+1);
+                LogPrint("pow", "  - Finding collisions\n");
+                int iChecked = 0;
+                int jChecked = 0;
+                std::vector<BasicStepRow> ic;
+                while (iChecked < X[v].size() && jChecked < X[v+1].size()) {
+                    LogPrint("pow", "    - iChecked = %d\n", iChecked);
+                    LogPrint("pow", "    - jChecked = %d\n", jChecked);
+                    // 2b) Find next set of unordered pairs with collisions on the next n/(k+1) bits
+                    int i = 0;
+                    int j = 1;
+                    while (iChecked+i < X[v].size() &&
+                            HasCollision(X[v][iChecked+i], X[v+1][jChecked], CollisionByteLength())) {
+                        i++;
+                    }
+                    while (jChecked+j < X[v+1].size() &&
+                            HasCollision(X[v][iChecked], X[v+1][jChecked+j], CollisionByteLength())) {
+                        j++;
+                    }
+
+                    // 2c) Calculate tuples (X_i ^ X_j, (i, j))
+                    for (int l = 0; l < i; l++) {
+                        for (int m = 0; m < j; m++) {
+                            if (DistinctIndices(X[v][iChecked+l], X[v+1][jChecked+m])) {
+                                ic.push_back(X[v][iChecked+l] ^ X[v][jChecked+m]);
+                                ic.back().TrimHash(CollisionByteLength());
+                            }
+                        }
+                    }
+
+                    if (i == 0 && j == 0) {
+                        jChecked++;
+                    } else {
+                        iChecked += i;
+                        jChecked += j;
+                    }
+                }
+
+                Xc.push_back(ic);
+            }
+
+            X = Xc;
+        }
+
+        // We are at the top of the tree
+        assert(X.size() == 1);
+        LogPrint("pow", "Number of possibilities: %d\n", X[0].size());
+        for (BasicStepRow row : X[0]) {
+            solns.insert(row.GetSolution());
+        }
+    }
+
+    return solns;
+}

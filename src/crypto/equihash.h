@@ -17,6 +17,7 @@
 
 typedef crypto_generichash_blake2b_state eh_HashState;
 typedef uint32_t eh_index;
+typedef uint8_t eh_trunc;
 
 struct invalid_params { };
 
@@ -69,6 +70,32 @@ public:
     friend inline bool DistinctIndices(const BasicStepRow& a, const BasicStepRow& b) { return DistinctIndices(a.indices, b.indices); }
 };
 
+class TruncatedStepRow : public StepRow
+{
+private:
+    std::vector<eh_trunc> indices;
+
+public:
+    TruncatedStepRow(unsigned int n, const eh_HashState& base_state, eh_index i, unsigned int ilen);
+    ~TruncatedStepRow() { }
+
+    TruncatedStepRow(const TruncatedStepRow& a);
+    TruncatedStepRow& operator=(const TruncatedStepRow& a);
+    TruncatedStepRow& operator^=(const TruncatedStepRow& a);
+
+    bool IndicesBefore(const TruncatedStepRow& a) { return indices[0] < a.indices[0]; }
+    std::vector<eh_trunc> GetPartialSolution() { return std::vector<eh_trunc>(indices); }
+    std::string GetHex() { return HexStr(hash, hash+len); }
+
+    friend inline const TruncatedStepRow operator^(const TruncatedStepRow& a, const TruncatedStepRow& b) {
+        if (a.indices[0] < b.indices[0]) { return TruncatedStepRow(a) ^= b; }
+        else { return TruncatedStepRow(b) ^= a; }
+    }
+    friend inline bool operator==(const TruncatedStepRow& a, const TruncatedStepRow& b) { return memcmp(a.hash, b.hash, a.len) == 0; }
+    friend inline bool operator<(const TruncatedStepRow& a, const TruncatedStepRow& b) { return memcmp(a.hash, b.hash, a.len) < 0; }
+    friend inline bool DistinctIndices(const TruncatedStepRow& a, const TruncatedStepRow& b) { return DistinctIndices(a.indices, b.indices); }
+};
+
 class Equihash
 {
 private:
@@ -83,6 +110,7 @@ public:
 
     int InitialiseState(eh_HashState& base_state);
     std::set<std::vector<eh_index>> BasicSolve(const eh_HashState& base_state);
+    std::set<std::vector<eh_index>> OptimisedSolve(const eh_HashState& base_state);
     bool IsValidSolution(const eh_HashState& base_state, std::vector<eh_index> soln);
 };
 
