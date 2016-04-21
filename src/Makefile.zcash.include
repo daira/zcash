@@ -39,6 +39,7 @@ zerocash_tests_test_zerocash_pour_ppzksnark_SOURCES = zerocash/tests/test_zeroca
 zerocash_tests_test_zerocash_pour_ppzksnark_LDADD = \
   $(BOOST_LIBS) \
   $(LIBZEROCASH) \
+  $(LIBBITCOIN_UTIL) \
   $(LIBBITCOIN_CRYPTO) \
   $(LIBZEROCASH_LIBS)
 
