@@ -58,6 +58,9 @@ public:
     // Ephemeral key
     uint256 ephemeralKey;
 
+    // Random seed
+    uint256 randomSeed;
+
     // MACs
     // The verification of the pour requires these MACs
     // to be provided as an input.
@@ -92,6 +95,7 @@ public:
         READWRITE(commitments);
         READWRITE(ciphertexts);
         READWRITE(ephemeralKey);
+        READWRITE(randomSeed);
         READWRITE(macs);
         READWRITE(proof);
     }
@@ -106,6 +110,7 @@ public:
             a.commitments == b.commitments &&
             a.ciphertexts == b.ciphertexts &&
             a.ephemeralKey == b.ephemeralKey &&
+            a.randomSeed == b.randomSeed &&
             a.macs == b.macs &&
             a.proof == b.proof
             );

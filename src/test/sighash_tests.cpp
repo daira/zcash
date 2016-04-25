@@ -125,6 +125,7 @@ void static RandomTransaction(CMutableTransaction &tx, bool fSingle) {
             pourtx.serials[0] = GetRandHash();
             pourtx.serials[1] = GetRandHash();
             pourtx.ephemeralKey = GetRandHash();
+            pourtx.randomSeed = GetRandHash();
             pourtx.ciphertexts[0] = {insecure_rand() % 100, insecure_rand() % 100};
             pourtx.ciphertexts[1] = {insecure_rand() % 100, insecure_rand() % 100};
             pourtx.macs[0] = GetRandHash();
