@@ -121,8 +121,6 @@ void static RandomTransaction(CMutableTransaction &tx, bool fSingle) {
             CPourTx pourtx;
             pourtx.vpub_old = insecure_rand() % 100000000;
             pourtx.vpub_new = insecure_rand() % 100000000;
-            RandomScript(pourtx.scriptPubKey);
-            RandomScript(pourtx.scriptSig);
             pourtx.anchor = GetRandHash();
             pourtx.serials[0] = GetRandHash();
             pourtx.serials[1] = GetRandHash();
