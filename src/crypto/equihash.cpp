@@ -519,10 +519,19 @@ std::set<std::vector<eh_index>> Equihash<N,K>::OptimisedSolve(const eh_HashState
     LogPrint("pow", "Found %d partial solutions\n", partialSolns.size());
 
     // Now for each solution run the algorithm again to recreate the indices
-    LogPrint("pow", "Culling solutions\n");
+    LogPrint("pow", "Regenerating first list\n");
     struct timeval tv_start;
     struct timeval tv_end;
     gettimeofday(&tv_start, 0);
+
+    std::vector<FullStepRow<FinalFullWidth>> Xo;
+    Xo.reserve(init_size);
+    for (eh_index i = 0; i < init_size; i++) {
+        Xo.emplace_back(N, K, base_state, i);
+        if (cancelled(PartialGeneration)) throw solver_cancelled;
+    }
+
+    LogPrint("pow", "Culling solutions\n");
     for (std::shared_ptr<eh_trunc> partialSoln : partialSolns) {
         gettimeofday(&tv_end, 0);
         LogPrint("pow", "Time to eliminate: %d\n", double(tv_end.tv_sec-tv_start.tv_sec) +
@@ -540,7 +549,7 @@ std::set<std::vector<eh_index>> Equihash<N,K>::OptimisedSolve(const eh_HashState
             icv.reserve(recreate_size);
             for (eh_index j = 0; j < recreate_size; j++) {
                 eh_index newIndex { UntruncateIndex(partialSoln.get()[i], j, CollisionBitLength + 1) };
-                icv.emplace_back(N, K, base_state, newIndex);
+                icv.emplace_back(Xo[newIndex]);
                 if (cancelled(PartialGeneration)) throw solver_cancelled;
             }
             boost::optional<std::vector<FullStepRow<FinalFullWidth>>> ic = icv;
