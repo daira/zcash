@@ -32,12 +32,6 @@ bigint<8> fq2_to_bigint(const curve_Fq2 &e)
     return temp;
 }
 
-// Returns whether a > b
-bool cmp_fq2(const curve_Fq2 &a, const curve_Fq2 &b)
-{
-    return fq2_to_bigint(a) > fq2_to_bigint(b);
-}
-
 // Writes a bigint in big endian
 template<mp_size_t LIMBS>
 void write_bigint(base_blob<8 * LIMBS * sizeof(mp_limb_t)> &blob, const bigint<LIMBS> &val)
@@ -145,7 +139,7 @@ CompressedG2::CompressedG2(curve_G2 point)
     point.to_affine_coordinates();
 
     x = Fq2(point.X);
-    y_gt = cmp_fq2(point.Y, -(point.Y));
+    y_gt = fq2_to_bigint(point.Y) > fq2_to_bigint(-(point.Y));
 }
 
 template<>
@@ -157,7 +151,7 @@ curve_G2 CompressedG2::to_libsnark_g2() const
     auto y_coordinate = ((x_coordinate.squared() * x_coordinate) + alt_bn128_twist_coeff_b).sqrt();
     auto y_coordinate_neg = -y_coordinate;
 
-    if (cmp_fq2(y_coordinate, y_coordinate_neg) != y_gt) {
+    if ((fq2_to_bigint(y_coordinate) > fq2_to_bigint(y_coordinate_neg)) != y_gt) {
         y_coordinate = y_coordinate_neg;
     }
 
