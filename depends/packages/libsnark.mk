@@ -3,8 +3,8 @@ $(package)_version=0.1
 $(package)_download_path=https://github.com/zcash/$(package)/archive/
 $(package)_file_name=$(package)-$($(package)_git_commit).tar.gz
 $(package)_download_file=$($(package)_git_commit).tar.gz
-$(package)_sha256_hash=97daf1f93ac375dfd643f912922d5693278efeeabb7ee4ca876bb95c30c60660
-$(package)_git_commit=8ae419bb79d3a0aeaf56642490e9d05100002edf
+$(package)_sha256_hash=022f18434df157655e0a9becabe229865f013b6cd7d47e361892318cdb8fcd62
+$(package)_git_commit=937ddc213e0bec7fa9cc61e46b4f8fe818c6a760
 
 $(package)_dependencies=libgmp libsodium
 
