@@ -87,7 +87,7 @@ uint256 static SignatureHashOld(CScript scriptCode, const CTransaction& txTo, un
 }
 
 void static RandomScript(CScript &script) {
-    static const opcodetype oplist[] = {OP_FALSE, OP_1, OP_2, OP_3, OP_CHECKSIG, OP_IF, OP_VERIF, OP_RETURN, OP_CODESEPARATOR};
+    static const opcodetype oplist[] = {OP_FALSE, OP_1, OP_2, OP_3, OP_CHECKSIG, OP_IF, OP_VERIF, OP_RETURN};
     script = CScript();
     int ops = (insecure_rand() % 10);
     for (int i=0; i<ops; i++)
@@ -242,6 +242,9 @@ BOOST_AUTO_TEST_CASE(sighash_from_data)
 
           std::vector<unsigned char> raw = ParseHex(raw_script);
           scriptCode.insert(scriptCode.end(), raw.begin(), raw.end());
+          if (scriptCode.Find(OP_CODESEPARATOR)) {
+            continue;
+          }
         } catch (...) {
           BOOST_ERROR("Bad test, couldn't deserialize data: " << strTest);
           continue;
