@@ -4,7 +4,7 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #include "miner.h"
-#include "trompequihash/equi_miner.h"
+#include "pow/tromp/equi_miner.h"
 
 #include "amount.h"
 #include "chainparams.h"
