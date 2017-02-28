@@ -8,7 +8,7 @@ if [[ -z "${MAKE-}" ]]; then
     MAKE=make
 fi
 
-# Allow overrides to $BUILD and $HOST for porters. Most users will not need it.
+# Allow overrides to $BUILD, $HOST, and $TARGET for porters. Most users will not need it.
 #   BUILD=i686-pc-linux-gnu ./zcutil/build.sh
 if [[ -z "${BUILD-}" ]]; then
     BUILD=x86_64-unknown-linux-gnu
@@ -16,13 +16,25 @@ fi
 if [[ -z "${HOST-}" ]]; then
     HOST=x86_64-unknown-linux-gnu
 fi
+if [[ -z "${TARGET-}" ]]; then
+    TARGET=x86_64-unknown-linux-gnu
+fi
 
 # Allow override to $CC and $CXX for porters. Most users will not need it.
 if [[ -z "${CC-}" ]]; then
     CC=gcc
+else
+    echo "Overriding C compiler: ${CC}"
 fi
 if [[ -z "${CXX-}" ]]; then
     CXX=g++
+else
+    echo "Overriding C++ compiler: ${CXX}"
+fi
+if [[ -z "${CXXEXTFLAGS-}" ]]; then
+    CXXEXTFLAGS=
+else
+    echo "Using additional C++ flags: ${CXXEXTFLAGS}"
 fi
 
 if [ "x$*" = 'x--help' ]
@@ -75,7 +87,7 @@ fi
 
 PREFIX="$(pwd)/depends/$BUILD/"
 
-HOST="$HOST" BUILD="$BUILD" "$MAKE" "$@" -C ./depends/ V=1 NO_QT=1
+HOST="$HOST" BUILD="$BUILD" TARGET="$TARGET" "$MAKE" "$@" -C ./depends/ V=1 NO_QT=1
 ./autogen.sh
-CC="$CC" CXX="$CXX" ./configure --prefix="${PREFIX}" --host="$HOST" --build="$BUILD" --with-gui=no "$HARDENING_ARG" "$LCOV_ARG" "$TEST_ARG" "$MINING_ARG" CXXFLAGS='-fwrapv -fno-strict-aliasing -Werror -g'
+./configure --prefix="${PREFIX}" --host="$HOST" --build="$BUILD" --target="$TARGET" --with-gui=no "$HARDENING_ARG" "$LCOV_ARG" "$TEST_ARG" "$MINING_ARG" CC="$CC" CXX="$CXX" CXXFLAGS="-fwrapv -fno-strict-aliasing -Werror -g ${CXXEXTFLAGS}"
 "$MAKE" "$@" V=1
