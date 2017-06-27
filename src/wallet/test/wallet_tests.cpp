@@ -23,6 +23,8 @@
 
 using namespace std;
 
+std::vector<std::unique_ptr<CWalletTx>> wtxn;
+
 typedef set<pair<const CWalletTx*,unsigned int> > CoinSet;
 
 BOOST_FIXTURE_TEST_SUITE(wallet_tests, TestingSetup)
@@ -42,21 +44,22 @@ static void add_coin(const CAmount& nValue, int nAge = 6*24, bool fIsFromMe = fa
         // so stop vin being empty, and cache a non-zero Debit to fake out IsFromMe()
         tx.vin.resize(1);
     }
-    CWalletTx* wtx = new CWalletTx(&wallet, tx);
+
+    std::unique_ptr<CWalletTx> wtx(new CWalletTx(&wallet, std::move(tx)));
     if (fIsFromMe)
     {
         wtx->fDebitCached = true;
         wtx->nDebitCached = 1;
     }
-    COutput output(wtx, nInput, nAge, true);
+    COutput output(wtx.get(), nInput, nAge, true);
     vCoins.push_back(output);
+    wtxn.emplace_back(std::move(wtx));
 }
 
 static void empty_wallet(void)
 {
-    BOOST_FOREACH(COutput output, vCoins)
-        delete output.tx;
     vCoins.clear();
+    wtxn.clear();
 }
 
 static bool equal_sets(CoinSet a, CoinSet b)
