@@ -51,20 +51,26 @@ IGNORE_EXPORTS = {
 }
 READELF_CMD = os.getenv('READELF', '/usr/bin/readelf')
 CPPFILT_CMD = os.getenv('CPPFILT', '/usr/bin/c++filt')
+
 # Allowed NEEDED libraries
 ALLOWED_LIBRARIES = {
 # zcashd
-'libgcc_s.so.1', # GCC base support
-'libc.so.6', # C library
-'libstdc++.so.6', # C++ standard library
-'libpthread.so.0', # threading
-'libanl.so.1', # DNS resolve
-'libm.so.6', # math library
-'librt.so.1', # real-time (clock)
-'libgomp.so.1', # OpenMP support library
+'libgcc_s.so.1',        # GCC base support
+'libc.so.6',            # C library
+'libpthread.so.0',      # threading
+'libanl.so.1',          # DNS resolve
+'libm.so.6',            # math library
+'librt.so.1',           # real-time (clock)
 'ld-linux-x86-64.so.2', # 64-bit dynamic linker
-'ld-linux.so.2', # 32-bit dynamic linker
-'libdl.so.2' # programming interface to dynamic linker
+'ld-linux.so.2',        # 32-bit dynamic linker
+'libdl.so.2',           # programming interface to dynamic linker
+}
+
+# These libraries are static by default but are allowed to be linked
+# dynamically if the --dynamic-libstdc++-and-libgomp option is passed.
+OPTIONALLY_DYNAMIC_LIBRARIES = {
+'libstdc++.so.6',       # C++ standard library
+'libgomp.so.1',         # OpenMP support library
 }
 
 class CPPFilt(object):
@@ -136,7 +142,13 @@ def read_libraries(filename):
 if __name__ == '__main__':
     cppfilt = CPPFilt()
     retval = 0
-    for filename in sys.argv[1:]:
+    allowed_libraries = ALLOWED_LIBRARIES
+    for arg in sys.argv[1:]:
+        if arg == '--dynamic-libstdc++-and-libgomp':
+            allowed_libraries = ALLOWED_LIBRARIES | OPTIONALLY_DYNAMIC_LIBRARIES
+            continue
+
+        filename = arg
         # Check imported symbols
         for sym,version in read_symbols(filename, True):
             if version and not check_version(MAX_VERSIONS, version):
@@ -150,7 +162,7 @@ if __name__ == '__main__':
             retval = 1
         # Check dependency libraries
         for library_name in read_libraries(filename):
-            if library_name not in ALLOWED_LIBRARIES:
+            if library_name not in allowed_libraries:
                 print('%s: NEEDED library %s is not allowed' % (filename, library_name))
                 retval = 1
 
