@@ -112,9 +112,11 @@ fi
 
 # If --static-libstdc++ is the next argument, link statically to libstdc++ and libgomp.
 STATIC_ARG=''
+STATIC_LDFLAGS=''
 if [ "x${1:-}" = 'x--static-libstdc++' ]
 then
-    STATIC_ARG='-static-libstdc++'
+    STATIC_ARG='-static-libstdc++ -static-libgcc'
+    STATIC_LDFLAGS="-static-libstdc++ -static-libgcc -pthread -ldl $(g++ --print-file-name=libgomp.a)"
     shift
 fi
 
@@ -128,5 +130,5 @@ ld -v
 
 HOST="$HOST" BUILD="$BUILD" NO_RUST="$RUST_ARG" NO_PROTON="$PROTON_ARG" STATIC_LIBSTDCXX="$STATIC_ARG" "$MAKE" "$@" -C ./depends/ V=1
 ./autogen.sh
-CC="$CC" CXX="$CXX" ./configure --prefix="${PREFIX}" --host="$HOST" --build="$BUILD" "$RUST_ARG" "$HARDENING_ARG" "$LCOV_ARG" "$TEST_ARG" "$MINING_ARG" "$PROTON_ARG" "$LIBS_ARG" CXXFLAGS="-fwrapv -fno-strict-aliasing -Werror -g" LDFLAGS="$STATIC_ARG"
+CC="$CC" CXX="$CXX" ./configure --prefix="${PREFIX}" --host="$HOST" --build="$BUILD" "$RUST_ARG" "$HARDENING_ARG" "$LCOV_ARG" "$TEST_ARG" "$MINING_ARG" "$PROTON_ARG" "$LIBS_ARG" CXXFLAGS="-fwrapv -fno-strict-aliasing -Werror -g $STATIC_ARG" LDFLAGS="$STATIC_LDFLAGS"
 "$MAKE" "$@" V=1

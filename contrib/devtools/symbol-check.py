@@ -39,8 +39,11 @@ import os
 MAX_VERSIONS = {
 'GCC':     (4,4,0),
 'CXXABI':  (1,3,3),
-'GLIBCXX': (3,4,13),
-'GLIBC':   (2,11)
+'GLIBCXX': (3,4,21),
+'CXXABI':  (1,3,8),
+'GLIBC':   (2,17),
+'GOMP':    (4,0),
+'OMP':     (1,0),
 }
 # See here for a description of _IO_stdin_used:
 # https://bugs.debian.org/cgi-bin/bugreport.cgi?bug=634261#109
@@ -67,7 +70,7 @@ ALLOWED_LIBRARIES = {
 }
 
 # These libraries are static by default but are allowed to be linked
-# dynamically if the --dynamic-libstdc++-and-libgomp option is passed.
+# dynamically if the --allow-optionally-dynamic option is passed.
 OPTIONALLY_DYNAMIC_LIBRARIES = {
 'libstdc++.so.6',       # C++ standard library
 'libgomp.so.1',         # OpenMP support library
@@ -143,23 +146,32 @@ if __name__ == '__main__':
     cppfilt = CPPFilt()
     retval = 0
     allowed_libraries = ALLOWED_LIBRARIES
+    allow_exports = False
+
     for arg in sys.argv[1:]:
-        if arg == '--dynamic-libstdc++-and-libgomp':
+        if arg == '--allow-optionally-dynamic':
             allowed_libraries = ALLOWED_LIBRARIES | OPTIONALLY_DYNAMIC_LIBRARIES
+            continue
+        if arg == '--allow-exports':
+            allow_exports = True
             continue
 
         filename = arg
+
         # Check imported symbols
         for sym,version in read_symbols(filename, True):
             if version and not check_version(MAX_VERSIONS, version):
                 print('%s: symbol %s from unsupported version %s' % (filename, cppfilt(sym), version))
                 retval = 1
+
         # Check exported symbols
-        for sym,version in read_symbols(filename, False):
-            if sym in IGNORE_EXPORTS:
-                continue
-            print('%s: export of symbol %s not allowed' % (filename, cppfilt(sym)))
-            retval = 1
+        if not allow_exports:
+            for sym,version in read_symbols(filename, False):
+                if sym in IGNORE_EXPORTS:
+                    continue
+                print('%s: export of symbol %s not allowed' % (filename, cppfilt(sym)))
+                retval = 1
+
         # Check dependency libraries
         for library_name in read_libraries(filename):
             if library_name not in allowed_libraries:
