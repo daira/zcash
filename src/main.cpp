@@ -3898,7 +3898,13 @@ bool ContextualCheckBlock(
 
     // If this is initial block download and "verifypowonly" is set, we'll skip verifying the transactions
     if (IsInitialBlockDownload(chainparams) && GetBoolArg("-verifypowonly", false)) {
-        return true;
+        if (fCheckpointsEnabled) {
+            CBlockIndex *pindexLastCheckpoint = Checkpoints::GetLastCheckpoint(chainparams.Checkpoints());
+            if (pindexLastCheckpoint && pindexLastCheckpoint->GetAncestor(pindexPrev->nHeight) == pindexPrev) {
+                // This block is connecting to an ancestor of a checkpoint: disable script checks
+                return true;
+            }
+        }
     }
 
     // Check that all transactions are finalized
