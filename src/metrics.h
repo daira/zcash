@@ -67,6 +67,8 @@ int EstimateNetHeightInner(int height, int64_t tipmediantime,
                            int heightLastCheckpoint, int64_t timeLastCheckpoint,
                            int64_t genesisTime, int64_t targetSpacing);
 
+int EstimateNetHeight(int height, int64_t tipmediantime, CChainParams chainParams);
+
 void TriggerRefresh();
 
 void ConnectMetricsScreen();
