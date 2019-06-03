@@ -127,7 +127,7 @@ int EstimateNetHeightInner(int height, int64_t tipmediantime,
     return ((netheight + 5) / 10) * 10;
 }
 
-int EstimateNetHeight(int height, int64_t tipmediantime, CChainParams chainParams)
+int EstimateNetHeight(int height, int64_t tipmediantime, const CChainParams& chainParams)
 {
     auto checkpointData = chainParams.Checkpoints();
     return EstimateNetHeightInner(

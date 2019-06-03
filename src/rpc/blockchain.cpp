@@ -4,6 +4,7 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #include "amount.h"
+#include "metrics.h"
 #include "chain.h"
 #include "chainparams.h"
 #include "checkpoints.h"
@@ -779,13 +780,11 @@ UniValue getblockchaininfo(const UniValue& params, bool fHelp)
     obj.push_back(Pair("pruned",                fPruneMode));
     obj.push_back(Pair("size_on_disk",          CalculateCurrentUsage()));
 
-
-    if (IsInitialBlockDownload()) {
+    if (IsInitialBlockDownload(Params())) {
         obj.push_back(Pair("estimatedheight",   EstimateNetHeight((int)chainActive.Height(), chainActive.Tip()->GetMedianTimePast(), Params())));
     } else {
         obj.push_back(Pair("estimatedheight",  (int)chainActive.Height()));
     }
-
 
     SproutMerkleTree tree;
     pcoinsTip->GetSproutAnchorAt(pcoinsTip->GetBestAnchor(SPROUT), tree);
