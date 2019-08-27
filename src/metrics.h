@@ -4,6 +4,7 @@
 
 #include "uint256.h"
 #include "consensus/params.h"
+#include "chainparams.h"
 
 #include <atomic>
 #include <mutex>
@@ -65,6 +66,8 @@ void TrackMinedBlock(uint256 hash);
 void MarkStartTime();
 double GetLocalSolPS();
 int EstimateNetHeight(const Consensus::Params& params, int currentBlockHeight, int64_t currentBlockTime);
+
+int EstimateNetHeight(int height, int64_t tipmediantime, const CChainParams& chainParams);
 
 void TriggerRefresh();
 
