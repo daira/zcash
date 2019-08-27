@@ -1037,7 +1037,7 @@ UniValue getblockchaininfo(const UniValue& params, bool fHelp)
     obj.push_back(Pair("size_on_disk",          CalculateCurrentUsage()));
 
     if (IsInitialBlockDownload(Params())) {
-        obj.push_back(Pair("estimatedheight",   EstimateNetHeight((int)chainActive.Height(), chainActive.Tip()->GetMedianTimePast(), Params())));
+        obj.push_back(Pair("estimatedheight",   EstimateNetHeight(Params().GetConsensus(), (int)chainActive.Height(), chainActive.Tip()->nTime)));
     } else {
         obj.push_back(Pair("estimatedheight",  (int)chainActive.Height()));
     }
