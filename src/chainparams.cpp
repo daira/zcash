@@ -117,8 +117,7 @@ public:
         consensus.vUpgrades[Consensus::UPGRADE_SAPLING].hashActivationBlock =
             uint256S("00000000025a57200d898ac7f21e26bf29028bbe96ec46e05b2c17cc9db9e4f3");
         consensus.vUpgrades[Consensus::UPGRADE_BLOSSOM].nProtocolVersion = 170009;
-        consensus.vUpgrades[Consensus::UPGRADE_BLOSSOM].nActivationHeight =
-            Consensus::NetworkUpgrade::NO_ACTIVATION_HEIGHT;
+        consensus.vUpgrades[Consensus::UPGRADE_BLOSSOM].nActivationHeight = 653600;
 
         // The best chain should have at least this much work.
         consensus.nMinimumChainWork = uint256S("000000000000000000000000000000000000000000000000017e73a331fae01c");
@@ -147,7 +146,6 @@ public:
         vSeeds.clear();
         vSeeds.push_back(CDNSSeedData("z.cash", "dnsseed.z.cash")); // Zcash
         vSeeds.push_back(CDNSSeedData("str4d.xyz", "dnsseed.str4d.xyz")); // @str4d
-        vSeeds.push_back(CDNSSeedData("znodes.org", "dnsseed.znodes.org")); // @bitcartel
 
         // guarantees the first 2 characters, when base58 encoded, are "t1"
         base58Prefixes[PUBKEY_ADDRESS]     = {0x1C,0xB8};
