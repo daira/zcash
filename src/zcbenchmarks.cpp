@@ -298,7 +298,7 @@ double benchmark_try_decrypt_sapling_notes(size_t nKeys)
 
     for (int i = 0; i < nKeys; i++) {
         auto sk = masterKey.Derive(i);
-        wallet.AddSaplingSpendingKey(sk, sk.DefaultAddress());
+        wallet.AddSaplingSpendingKey(sk);
     }
 
     // Generate a key that has not been added to the wallet
@@ -398,7 +398,7 @@ double benchmark_increment_sapling_note_witnesses(size_t nTxs)
     SaplingMerkleTree saplingTree;
 
     auto saplingSpendingKey = GetTestMasterSaplingSpendingKey();
-    wallet.AddSaplingSpendingKey(saplingSpendingKey, saplingSpendingKey.DefaultAddress());
+    wallet.AddSaplingSpendingKey(saplingSpendingKey);
 
     // First block
     CBlock block1;
@@ -596,12 +596,12 @@ double benchmark_create_sapling_spend()
     auto address = sk.default_address();
     SaplingNote note(address, GetRand(MAX_MONEY));
     SaplingMerkleTree tree;
-    auto maybe_cm = note.cm();
-    tree.append(maybe_cm.get());
+    auto maybe_cmu = note.cmu();
+    tree.append(maybe_cmu.get());
     auto anchor = tree.root();
     auto witness = tree.witness();
     auto maybe_nf = note.nullifier(expsk.full_viewing_key(), witness.position());
-    if (!(maybe_cm && maybe_nf)) {
+    if (!(maybe_cmu && maybe_nf)) {
         throw JSONRPCError(RPC_INTERNAL_ERROR, "Could not create note commitment and nullifier");
     }
 
@@ -735,7 +735,7 @@ double benchmark_verify_sapling_output()
     bool result = librustzcash_sapling_check_output(
                 ctx,
                 output.cv.begin(),
-                output.cm.begin(),
+                output.cmu.begin(),
                 output.ephemeralKey.begin(),
                 output.zkproof.begin()
             );

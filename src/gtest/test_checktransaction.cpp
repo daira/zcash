@@ -5,11 +5,14 @@
 #include "main.h"
 #include "primitives/transaction.h"
 #include "consensus/validation.h"
+#include "transaction_builder.h"
 #include "utiltest.h"
+
+#include <librustzcash.h>
 
 extern ZCJoinSplit* params;
 
-TEST(checktransaction_tests, check_vpub_not_both_nonzero) {
+TEST(ChecktransactionTests, CheckVpubNotBothNonzero) {
     CMutableTransaction tx;
     tx.nVersion = 2;
 
@@ -96,14 +99,14 @@ void CreateJoinSplitSignature(CMutableTransaction& mtx, uint32_t consensusBranch
                         ) == 0);
 }
 
-TEST(checktransaction_tests, valid_transaction) {
+TEST(ChecktransactionTests, ValidTransaction) {
     CMutableTransaction mtx = GetValidTransaction();
     CTransaction tx(mtx);
     MockCValidationState state;
     EXPECT_TRUE(CheckTransactionWithoutProofVerification(tx, state));
 }
 
-TEST(checktransaction_tests, BadVersionTooLow) {
+TEST(ChecktransactionTests, BadVersionTooLow) {
     CMutableTransaction mtx = GetValidTransaction();
     mtx.nVersion = 0;
 
@@ -113,7 +116,7 @@ TEST(checktransaction_tests, BadVersionTooLow) {
     CheckTransactionWithoutProofVerification(tx, state);
 }
 
-TEST(checktransaction_tests, bad_txns_vin_empty) {
+TEST(ChecktransactionTests, BadTxnsVinEmpty) {
     CMutableTransaction mtx = GetValidTransaction();
     mtx.vJoinSplit.resize(0);
     mtx.vin.resize(0);
@@ -124,7 +127,7 @@ TEST(checktransaction_tests, bad_txns_vin_empty) {
     CheckTransactionWithoutProofVerification(tx, state);
 }
 
-TEST(checktransaction_tests, bad_txns_vout_empty) {
+TEST(ChecktransactionTests, BadTxnsVoutEmpty) {
     CMutableTransaction mtx = GetValidTransaction();
     mtx.vJoinSplit.resize(0);
     mtx.vout.resize(0);
@@ -136,7 +139,7 @@ TEST(checktransaction_tests, bad_txns_vout_empty) {
     CheckTransactionWithoutProofVerification(tx, state);
 }
 
-TEST(checktransaction_tests, BadTxnsOversize) {
+TEST(ChecktransactionTests, BadTxnsOversize) {
     SelectParams(CBaseChainParams::REGTEST);
     CMutableTransaction mtx = GetValidTransaction();
 
@@ -195,7 +198,7 @@ TEST(checktransaction_tests, BadTxnsOversize) {
     }
 }
 
-TEST(checktransaction_tests, OversizeSaplingTxns) {
+TEST(ChecktransactionTests, OversizeSaplingTxns) {
     RegtestActivateSapling();
 
     CMutableTransaction mtx = GetValidTransaction();
@@ -252,7 +255,7 @@ TEST(checktransaction_tests, OversizeSaplingTxns) {
     RegtestDeactivateSapling();
 }
 
-TEST(checktransaction_tests, bad_txns_vout_negative) {
+TEST(ChecktransactionTests, BadTxnsVoutNegative) {
     CMutableTransaction mtx = GetValidTransaction();
     mtx.vout[0].nValue = -1;
 
@@ -263,7 +266,7 @@ TEST(checktransaction_tests, bad_txns_vout_negative) {
     CheckTransactionWithoutProofVerification(tx, state);
 }
 
-TEST(checktransaction_tests, bad_txns_vout_toolarge) {
+TEST(ChecktransactionTests, BadTxnsVoutToolarge) {
     CMutableTransaction mtx = GetValidTransaction();
     mtx.vout[0].nValue = MAX_MONEY + 1;
 
@@ -274,7 +277,7 @@ TEST(checktransaction_tests, bad_txns_vout_toolarge) {
     CheckTransactionWithoutProofVerification(tx, state);
 }
 
-TEST(checktransaction_tests, bad_txns_txouttotal_toolarge_outputs) {
+TEST(ChecktransactionTests, BadTxnsTxouttotalToolargeOutputs) {
     CMutableTransaction mtx = GetValidTransaction();
     mtx.vout[0].nValue = MAX_MONEY;
     mtx.vout[1].nValue = 1;
@@ -286,7 +289,7 @@ TEST(checktransaction_tests, bad_txns_txouttotal_toolarge_outputs) {
     CheckTransactionWithoutProofVerification(tx, state);
 }
 
-TEST(checktransaction_tests, ValueBalanceNonZero) {
+TEST(ChecktransactionTests, ValueBalanceNonZero) {
     CMutableTransaction mtx = GetValidTransaction();
     mtx.valueBalance = 10;
 
@@ -297,7 +300,7 @@ TEST(checktransaction_tests, ValueBalanceNonZero) {
     CheckTransactionWithoutProofVerification(tx, state);
 }
 
-TEST(checktransaction_tests, PositiveValueBalanceTooLarge) {
+TEST(ChecktransactionTests, PositiveValueBalanceTooLarge) {
     CMutableTransaction mtx = GetValidTransaction();
     mtx.vShieldedSpend.resize(1);
     mtx.valueBalance = MAX_MONEY + 1;
@@ -309,7 +312,7 @@ TEST(checktransaction_tests, PositiveValueBalanceTooLarge) {
     CheckTransactionWithoutProofVerification(tx, state);
 }
 
-TEST(checktransaction_tests, NegativeValueBalanceTooLarge) {
+TEST(ChecktransactionTests, NegativeValueBalanceTooLarge) {
     CMutableTransaction mtx = GetValidTransaction();
     mtx.vShieldedSpend.resize(1);
     mtx.valueBalance = -(MAX_MONEY + 1);
@@ -321,7 +324,7 @@ TEST(checktransaction_tests, NegativeValueBalanceTooLarge) {
     CheckTransactionWithoutProofVerification(tx, state);
 }
 
-TEST(checktransaction_tests, ValueBalanceOverflowsTotal) {
+TEST(ChecktransactionTests, ValueBalanceOverflowsTotal) {
     CMutableTransaction mtx = GetValidTransaction();
     mtx.vShieldedSpend.resize(1);
     mtx.vout[0].nValue = 1;
@@ -334,7 +337,7 @@ TEST(checktransaction_tests, ValueBalanceOverflowsTotal) {
     CheckTransactionWithoutProofVerification(tx, state);
 }
 
-TEST(checktransaction_tests, bad_txns_txouttotal_toolarge_joinsplit) {
+TEST(ChecktransactionTests, BadTxnsTxouttotalToolargeJoinsplit) {
     CMutableTransaction mtx = GetValidTransaction();
     mtx.vout[0].nValue = 1;
     mtx.vJoinSplit[0].vpub_old = MAX_MONEY;
@@ -346,7 +349,7 @@ TEST(checktransaction_tests, bad_txns_txouttotal_toolarge_joinsplit) {
     CheckTransactionWithoutProofVerification(tx, state);
 }
 
-TEST(checktransaction_tests, bad_txns_txintotal_toolarge_joinsplit) {
+TEST(ChecktransactionTests, BadTxnsTxintotalToolargeJoinsplit) {
     CMutableTransaction mtx = GetValidTransaction();
     mtx.vJoinSplit[0].vpub_new = MAX_MONEY - 1;
     mtx.vJoinSplit[1].vpub_new = MAX_MONEY - 1;
@@ -358,7 +361,7 @@ TEST(checktransaction_tests, bad_txns_txintotal_toolarge_joinsplit) {
     CheckTransactionWithoutProofVerification(tx, state);
 }
 
-TEST(checktransaction_tests, bad_txns_vpub_old_negative) {
+TEST(ChecktransactionTests, BadTxnsVpubOldNegative) {
     CMutableTransaction mtx = GetValidTransaction();
     mtx.vJoinSplit[0].vpub_old = -1;
 
@@ -369,7 +372,7 @@ TEST(checktransaction_tests, bad_txns_vpub_old_negative) {
     CheckTransactionWithoutProofVerification(tx, state);
 }
 
-TEST(checktransaction_tests, bad_txns_vpub_new_negative) {
+TEST(ChecktransactionTests, BadTxnsVpubNewNegative) {
     CMutableTransaction mtx = GetValidTransaction();
     mtx.vJoinSplit[0].vpub_new = -1;
 
@@ -380,7 +383,7 @@ TEST(checktransaction_tests, bad_txns_vpub_new_negative) {
     CheckTransactionWithoutProofVerification(tx, state);
 }
 
-TEST(checktransaction_tests, bad_txns_vpub_old_toolarge) {
+TEST(ChecktransactionTests, BadTxnsVpubOldToolarge) {
     CMutableTransaction mtx = GetValidTransaction();
     mtx.vJoinSplit[0].vpub_old = MAX_MONEY + 1;
 
@@ -391,7 +394,7 @@ TEST(checktransaction_tests, bad_txns_vpub_old_toolarge) {
     CheckTransactionWithoutProofVerification(tx, state);
 }
 
-TEST(checktransaction_tests, bad_txns_vpub_new_toolarge) {
+TEST(ChecktransactionTests, BadTxnsVpubNewToolarge) {
     CMutableTransaction mtx = GetValidTransaction();
     mtx.vJoinSplit[0].vpub_new = MAX_MONEY + 1;
 
@@ -402,7 +405,7 @@ TEST(checktransaction_tests, bad_txns_vpub_new_toolarge) {
     CheckTransactionWithoutProofVerification(tx, state);
 }
 
-TEST(checktransaction_tests, bad_txns_vpubs_both_nonzero) {
+TEST(ChecktransactionTests, BadTxnsVpubsBothNonzero) {
     CMutableTransaction mtx = GetValidTransaction();
     mtx.vJoinSplit[0].vpub_old = 1;
     mtx.vJoinSplit[0].vpub_new = 1;
@@ -414,7 +417,7 @@ TEST(checktransaction_tests, bad_txns_vpubs_both_nonzero) {
     CheckTransactionWithoutProofVerification(tx, state);
 }
 
-TEST(checktransaction_tests, bad_txns_inputs_duplicate) {
+TEST(ChecktransactionTests, BadTxnsInputsDuplicate) {
     CMutableTransaction mtx = GetValidTransaction();
     mtx.vin[1].prevout.hash = mtx.vin[0].prevout.hash;
     mtx.vin[1].prevout.n = mtx.vin[0].prevout.n;
@@ -426,7 +429,7 @@ TEST(checktransaction_tests, bad_txns_inputs_duplicate) {
     CheckTransactionWithoutProofVerification(tx, state);
 }
 
-TEST(checktransaction_tests, bad_joinsplits_nullifiers_duplicate_same_joinsplit) {
+TEST(ChecktransactionTests, BadJoinsplitsNullifiersDuplicateSameJoinsplit) {
     CMutableTransaction mtx = GetValidTransaction();
     mtx.vJoinSplit[0].nullifiers.at(0) = uint256S("0000000000000000000000000000000000000000000000000000000000000000");
     mtx.vJoinSplit[0].nullifiers.at(1) = uint256S("0000000000000000000000000000000000000000000000000000000000000000");
@@ -438,7 +441,7 @@ TEST(checktransaction_tests, bad_joinsplits_nullifiers_duplicate_same_joinsplit)
     CheckTransactionWithoutProofVerification(tx, state);
 }
 
-TEST(checktransaction_tests, bad_joinsplits_nullifiers_duplicate_different_joinsplit) {
+TEST(ChecktransactionTests, BadJoinsplitsNullifiersDuplicateDifferentJoinsplit) {
     CMutableTransaction mtx = GetValidTransaction();
     mtx.vJoinSplit[0].nullifiers.at(0) = uint256S("0000000000000000000000000000000000000000000000000000000000000000");
     mtx.vJoinSplit[1].nullifiers.at(0) = uint256S("0000000000000000000000000000000000000000000000000000000000000000");
@@ -450,7 +453,7 @@ TEST(checktransaction_tests, bad_joinsplits_nullifiers_duplicate_different_joins
     CheckTransactionWithoutProofVerification(tx, state);
 }
 
-TEST(checktransaction_tests, bad_cb_has_joinsplits) {
+TEST(ChecktransactionTests, BadCbHasJoinsplits) {
     CMutableTransaction mtx = GetValidTransaction();
     // Make it a coinbase.
     mtx.vin.resize(1);
@@ -466,7 +469,7 @@ TEST(checktransaction_tests, bad_cb_has_joinsplits) {
     CheckTransactionWithoutProofVerification(tx, state);
 }
 
-TEST(checktransaction_tests, bad_cb_empty_scriptsig) {
+TEST(ChecktransactionTests, BadCbEmptyScriptsig) {
     CMutableTransaction mtx = GetValidTransaction();
     // Make it a coinbase.
     mtx.vin.resize(1);
@@ -482,7 +485,7 @@ TEST(checktransaction_tests, bad_cb_empty_scriptsig) {
     CheckTransactionWithoutProofVerification(tx, state);
 }
 
-TEST(checktransaction_tests, bad_txns_prevout_null) {
+TEST(ChecktransactionTests, BadTxnsPrevoutNull) {
     CMutableTransaction mtx = GetValidTransaction();
     mtx.vin[1].prevout.SetNull();
 
@@ -494,7 +497,7 @@ TEST(checktransaction_tests, bad_txns_prevout_null) {
     CheckTransactionWithoutProofVerification(tx, state);
 }
 
-TEST(checktransaction_tests, bad_txns_invalid_joinsplit_signature) {
+TEST(ChecktransactionTests, BadTxnsInvalidJoinsplitSignature) {
     SelectParams(CBaseChainParams::REGTEST);
     auto chainparams = Params();
 
@@ -517,7 +520,7 @@ TEST(checktransaction_tests, bad_txns_invalid_joinsplit_signature) {
     ContextualCheckTransaction(tx, state, chainparams, 0, true, [](const CChainParams&) { return false; });
 }
 
-TEST(checktransaction_tests, non_canonical_ed25519_signature) {
+TEST(ChecktransactionTests, NonCanonicalEd25519Signature) {
     SelectParams(CBaseChainParams::REGTEST);
     auto chainparams = Params();
 
@@ -561,7 +564,7 @@ TEST(checktransaction_tests, non_canonical_ed25519_signature) {
     ContextualCheckTransaction(tx, state, chainparams, 0, true, [](const CChainParams&) { return false; });
 }
 
-TEST(checktransaction_tests, OverwinterConstructors) {
+TEST(ChecktransactionTests, OverwinterConstructors) {
     CMutableTransaction mtx;
     mtx.fOverwintered = true;
     mtx.nVersion = OVERWINTER_TX_VERSION;
@@ -592,7 +595,7 @@ TEST(checktransaction_tests, OverwinterConstructors) {
     EXPECT_TRUE(tx2 == tx);
 }
 
-TEST(checktransaction_tests, OverwinterSerialization) {
+TEST(ChecktransactionTests, OverwinterSerialization) {
     CMutableTransaction mtx;
     mtx.fOverwintered = true;
     mtx.nVersion = OVERWINTER_TX_VERSION;
@@ -645,7 +648,7 @@ TEST(checktransaction_tests, OverwinterSerialization) {
     }
 }
 
-TEST(checktransaction_tests, OverwinterDefaultValues) {
+TEST(ChecktransactionTests, OverwinterDefaultValues) {
     // Check default values (this will fail when defaults change; test should then be updated)
     CTransaction tx;
     EXPECT_EQ(tx.nVersion, 1);
@@ -655,7 +658,7 @@ TEST(checktransaction_tests, OverwinterDefaultValues) {
 }
 
 // A valid v3 transaction with no joinsplits
-TEST(checktransaction_tests, OverwinterValidTx) {
+TEST(ChecktransactionTests, OverwinterValidTx) {
     CMutableTransaction mtx = GetValidTransaction();
     mtx.vJoinSplit.resize(0);
     mtx.fOverwintered = true;
@@ -667,7 +670,7 @@ TEST(checktransaction_tests, OverwinterValidTx) {
     EXPECT_TRUE(CheckTransactionWithoutProofVerification(tx, state));
 }
 
-TEST(checktransaction_tests, OverwinterExpiryHeight) {
+TEST(ChecktransactionTests, OverwinterExpiryHeight) {
     CMutableTransaction mtx = GetValidTransaction();
     mtx.vJoinSplit.resize(0);
     mtx.fOverwintered = true;
@@ -716,7 +719,7 @@ TEST(checktransaction_tests, BlossomExpiryHeight) {
 
 // Test that a Sprout tx with a negative version number is detected
 // given the new Overwinter logic
-TEST(checktransaction_tests, SproutTxVersionTooLow) {
+TEST(ChecktransactionTests, SproutTxVersionTooLow) {
     CMutableTransaction mtx = GetValidTransaction();
     mtx.vJoinSplit.resize(0);
     mtx.fOverwintered = false;
@@ -738,7 +741,7 @@ class UNSAFE_CTransaction : public CTransaction {
         UNSAFE_CTransaction(const CMutableTransaction &tx) : CTransaction(tx, true) {}
 };
 
-TEST(checktransaction_tests, SaplingSproutInputSumsTooLarge) {
+TEST(ChecktransactionTests, SaplingSproutInputSumsTooLarge) {
     CMutableTransaction mtx = GetValidTransaction();
     mtx.vJoinSplit.resize(0);
     mtx.fOverwintered = true;
@@ -791,7 +794,7 @@ TEST(checktransaction_tests, SaplingSproutInputSumsTooLarge) {
 }
 
 // Test bad Overwinter version number in CheckTransactionWithoutProofVerification
-TEST(checktransaction_tests, OverwinterVersionNumberLow) {
+TEST(ChecktransactionTests, OverwinterVersionNumberLow) {
     CMutableTransaction mtx = GetValidTransaction();
     mtx.vJoinSplit.resize(0);
     mtx.fOverwintered = true;
@@ -806,7 +809,7 @@ TEST(checktransaction_tests, OverwinterVersionNumberLow) {
 }
 
 // Test bad Overwinter version number in ContextualCheckTransaction
-TEST(checktransaction_tests, OverwinterVersionNumberHigh) {
+TEST(ChecktransactionTests, OverwinterVersionNumberHigh) {
     SelectParams(CBaseChainParams::REGTEST);
     UpdateNetworkUpgradeParameters(Consensus::UPGRADE_OVERWINTER, Consensus::NetworkUpgrade::ALWAYS_ACTIVE);
 
@@ -828,7 +831,7 @@ TEST(checktransaction_tests, OverwinterVersionNumberHigh) {
 
 
 // Test bad Overwinter version group id
-TEST(checktransaction_tests, OverwinterBadVersionGroupId) {
+TEST(ChecktransactionTests, OverwinterBadVersionGroupId) {
     CMutableTransaction mtx = GetValidTransaction();
     mtx.vJoinSplit.resize(0);
     mtx.fOverwintered = true;
@@ -843,7 +846,7 @@ TEST(checktransaction_tests, OverwinterBadVersionGroupId) {
 }
 
 // This tests an Overwinter transaction checked against Sprout
-TEST(checktransaction_tests, OverwinterNotActive) {
+TEST(ChecktransactionTests, OverwinterNotActive) {
     SelectParams(CBaseChainParams::TESTNET);
     auto chainparams = Params();
 
@@ -870,7 +873,7 @@ TEST(checktransaction_tests, OverwinterNotActive) {
 }
 
 // This tests a transaction without the fOverwintered flag set, against the Overwinter consensus rule set.
-TEST(checktransaction_tests, OverwinterFlagNotSet) {
+TEST(ChecktransactionTests, OverwinterFlagNotSet) {
     SelectParams(CBaseChainParams::REGTEST);
     UpdateNetworkUpgradeParameters(Consensus::UPGRADE_OVERWINTER, Consensus::NetworkUpgrade::ALWAYS_ACTIVE);
 
@@ -891,7 +894,7 @@ TEST(checktransaction_tests, OverwinterFlagNotSet) {
 
 
 // Overwinter (NU0) does not allow soft fork to version 4 Overwintered tx.
-TEST(checktransaction_tests, OverwinterInvalidSoftForkVersion) {
+TEST(ChecktransactionTests, OverwinterInvalidSoftForkVersion) {
     CMutableTransaction mtx = GetValidTransaction();
     mtx.fOverwintered = true;
     mtx.nVersion = 4; // This is not allowed
@@ -923,7 +926,7 @@ static void ContextualCreateTxCheck(const Consensus::Params& params, int nHeight
 
 
 // Test CreateNewContextualCMutableTransaction sets default values based on height
-TEST(checktransaction_tests, OverwinteredContextualCreateTx) {
+TEST(ChecktransactionTests, OverwinteredContextualCreateTx) {
     SelectParams(CBaseChainParams::REGTEST);
     const Consensus::Params& params = Params().GetConsensus();
     int overwinterActivationHeight = 5;
@@ -967,7 +970,7 @@ TEST(checktransaction_tests, OverwinteredContextualCreateTx) {
 }
 
 // Test a v1 transaction which has a malformed header, perhaps modified in-flight
-TEST(checktransaction_tests, BadTxReceivedOverNetwork)
+TEST(ChecktransactionTests, BadTxReceivedOverNetwork)
 {
     // First four bytes <01 00 00 00> have been modified to be <FC FF FF FF> (-4 as an int32)
     std::string goodPrefix = "01000000";
@@ -1026,4 +1029,192 @@ TEST(checktransaction_tests, BadTxReceivedOverNetwork)
             FAIL() << "Expected std::ios_base::failure 'Unknown transaction format', got some other exception";
         }
     }
+}
+
+TEST(CheckTransaction, InvalidShieldedCoinbase) {
+    RegtestActivateSapling();
+
+    CMutableTransaction mtx = GetValidTransaction();
+    mtx.fOverwintered = true;
+    mtx.nVersionGroupId = SAPLING_VERSION_GROUP_ID;
+    mtx.nVersion = SAPLING_TX_VERSION;
+
+    // Make it an invalid shielded coinbase (no ciphertexts or commitments).
+    mtx.vin.resize(1);
+    mtx.vin[0].prevout.SetNull();
+    mtx.vShieldedOutput.resize(1);
+    mtx.vJoinSplit.resize(0);
+
+    CTransaction tx(mtx);
+    EXPECT_TRUE(tx.IsCoinBase());
+
+    // Before Heartwood, output descriptions are rejected.
+    MockCValidationState state;
+    EXPECT_CALL(state, DoS(100, false, REJECT_INVALID, "bad-cb-has-output-description", false)).Times(1);
+    ContextualCheckTransaction(tx, state, Params(), 10, 57);
+
+    RegtestActivateHeartwood(false, Consensus::NetworkUpgrade::ALWAYS_ACTIVE);
+
+    // From Heartwood, the output description is allowed but invalid (undecryptable).
+    EXPECT_CALL(state, DoS(100, false, REJECT_INVALID, "bad-cb-output-desc-invalid-outct", false)).Times(1);
+    ContextualCheckTransaction(tx, state, Params(), 10, 57);
+
+    RegtestDeactivateHeartwood();
+}
+
+TEST(CheckTransaction, HeartwoodAcceptsShieldedCoinbase) {
+    RegtestActivateHeartwood(false, Consensus::NetworkUpgrade::ALWAYS_ACTIVE);
+    auto chainparams = Params();
+
+    uint256 ovk;
+    auto note = libzcash::SaplingNote(
+        libzcash::SaplingSpendingKey::random().default_address(), CAmount(123456));
+    auto output = OutputDescriptionInfo(ovk, note, {{0xF6}});
+
+    auto ctx = librustzcash_sapling_proving_ctx_init();
+    auto odesc = output.Build(ctx).get();
+    librustzcash_sapling_proving_ctx_free(ctx);
+
+    CMutableTransaction mtx = GetValidTransaction();
+    mtx.fOverwintered = true;
+    mtx.nVersionGroupId = SAPLING_VERSION_GROUP_ID;
+    mtx.nVersion = SAPLING_TX_VERSION;
+
+    mtx.vin.resize(1);
+    mtx.vin[0].prevout.SetNull();
+    mtx.vJoinSplit.resize(0);
+    mtx.vShieldedOutput.push_back(odesc);
+
+    // Transaction should fail with a bad public cmu.
+    {
+        auto cmOrig = mtx.vShieldedOutput[0].cmu;
+        mtx.vShieldedOutput[0].cmu = uint256S("1234");
+        CTransaction tx(mtx);
+        EXPECT_TRUE(tx.IsCoinBase());
+
+        MockCValidationState state;
+        EXPECT_CALL(state, DoS(100, false, REJECT_INVALID, "bad-cb-output-desc-invalid-outct", false)).Times(1);
+        ContextualCheckTransaction(tx, state, chainparams, 10, 57);
+
+        mtx.vShieldedOutput[0].cmu = cmOrig;
+    }
+
+    // Transaction should fail with a bad outCiphertext.
+    {
+        auto outCtOrig = mtx.vShieldedOutput[0].outCiphertext;
+        mtx.vShieldedOutput[0].outCiphertext = {{}};
+        CTransaction tx(mtx);
+        EXPECT_TRUE(tx.IsCoinBase());
+
+        MockCValidationState state;
+        EXPECT_CALL(state, DoS(100, false, REJECT_INVALID, "bad-cb-output-desc-invalid-outct", false)).Times(1);
+        ContextualCheckTransaction(tx, state, chainparams, 10, 57);
+
+        mtx.vShieldedOutput[0].outCiphertext = outCtOrig;
+    }
+
+    // Transaction should fail with a bad encCiphertext.
+    {
+        auto encCtOrig = mtx.vShieldedOutput[0].encCiphertext;
+        mtx.vShieldedOutput[0].encCiphertext = {{}};
+        CTransaction tx(mtx);
+        EXPECT_TRUE(tx.IsCoinBase());
+
+        MockCValidationState state;
+        EXPECT_CALL(state, DoS(100, false, REJECT_INVALID, "bad-cb-output-desc-invalid-encct", false)).Times(1);
+        ContextualCheckTransaction(tx, state, chainparams, 10, 57);
+
+        mtx.vShieldedOutput[0].encCiphertext = encCtOrig;
+    }
+
+    // Test the success case. The unmodified transaction should fail signature
+    // validation, which is an unrelated consensus rule and is checked after the
+    // shielded coinbase rules have passed.
+    {
+        CTransaction tx(mtx);
+        EXPECT_TRUE(tx.IsCoinBase());
+
+        MockCValidationState state;
+        EXPECT_CALL(state, DoS(100, false, REJECT_INVALID, "bad-txns-sapling-binding-signature-invalid", false)).Times(1);
+        ContextualCheckTransaction(tx, state, chainparams, 10, 57);
+    }
+
+    RegtestDeactivateHeartwood();
+}
+
+// Check that the consensus rules relevant to valueBalance, vShieldedOutput, and
+// bindingSig from https://zips.z.cash/protocol/protocol.pdf#txnencoding are
+// applied to coinbase transactions.
+TEST(CheckTransaction, HeartwoodEnforcesSaplingRulesOnShieldedCoinbase) {
+    RegtestActivateHeartwood(false, Consensus::NetworkUpgrade::ALWAYS_ACTIVE);
+    auto chainparams = Params();
+
+    uint256 ovk;
+    auto note = libzcash::SaplingNote(
+        libzcash::SaplingSpendingKey::random().default_address(), CAmount(123456));
+    auto output = OutputDescriptionInfo(ovk, note, {{0xF6}});
+
+    CMutableTransaction mtx = GetValidTransaction();
+    mtx.fOverwintered = true;
+    mtx.nVersionGroupId = SAPLING_VERSION_GROUP_ID;
+    mtx.nVersion = SAPLING_TX_VERSION;
+
+    mtx.vin.resize(1);
+    mtx.vin[0].prevout.SetNull();
+    mtx.vin[0].scriptSig << 123;
+    mtx.vJoinSplit.resize(0);
+    mtx.valueBalance = -1000;
+
+    // Coinbase transaction should fail non-contextual checks with no shielded
+    // outputs and non-zero valueBalance.
+    {
+        CTransaction tx(mtx);
+        EXPECT_TRUE(tx.IsCoinBase());
+
+        MockCValidationState state;
+        EXPECT_CALL(state, DoS(100, false, REJECT_INVALID, "bad-txns-valuebalance-nonzero", false)).Times(1);
+        EXPECT_FALSE(CheckTransactionWithoutProofVerification(tx, state));
+    }
+
+    // Add a Sapling output.
+    auto ctx = librustzcash_sapling_proving_ctx_init();
+    auto odesc = output.Build(ctx).get();
+    librustzcash_sapling_proving_ctx_free(ctx);
+    mtx.vShieldedOutput.push_back(odesc);
+
+    // Coinbase transaction should fail non-contextual checks with valueBalance
+    // out of range.
+    {
+        mtx.valueBalance = MAX_MONEY + 1;
+        CTransaction tx(mtx);
+        EXPECT_TRUE(tx.IsCoinBase());
+
+        MockCValidationState state;
+        EXPECT_CALL(state, DoS(100, false, REJECT_INVALID, "bad-txns-valuebalance-toolarge", false)).Times(1);
+        EXPECT_FALSE(CheckTransactionWithoutProofVerification(tx, state));
+    }
+    {
+        mtx.valueBalance = -MAX_MONEY - 1;
+        CTransaction tx(mtx);
+        EXPECT_TRUE(tx.IsCoinBase());
+
+        MockCValidationState state;
+        EXPECT_CALL(state, DoS(100, false, REJECT_INVALID, "bad-txns-valuebalance-toolarge", false)).Times(1);
+        EXPECT_FALSE(CheckTransactionWithoutProofVerification(tx, state));
+    }
+
+    mtx.valueBalance = -1000;
+    CTransaction tx(mtx);
+    EXPECT_TRUE(tx.IsCoinBase());
+
+    // Coinbase transaction should now pass non-contextual checks.
+    MockCValidationState state;
+    EXPECT_TRUE(CheckTransactionWithoutProofVerification(tx, state));
+
+    // Coinbase transaction does not pass contextual checks, as bindingSig
+    // consensus rule is enforced.
+    EXPECT_CALL(state, DoS(100, false, REJECT_INVALID, "bad-txns-sapling-binding-signature-invalid", false)).Times(1);
+    ContextualCheckTransaction(tx, state, chainparams, 10, 57);
+
+    RegtestDeactivateHeartwood();
 }
