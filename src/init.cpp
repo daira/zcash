@@ -15,6 +15,7 @@
 #include "compat/sanity.h"
 #include "consensus/upgrades.h"
 #include "consensus/validation.h"
+#include "experimental_features.h"
 #include "httpserver.h"
 #include "httprpc.h"
 #include "key.h"
@@ -32,7 +33,6 @@
 #include "script/standard.h"
 #include "script/sigcache.h"
 #include "scheduler.h"
-#include "timedata.h"
 #include "txdb.h"
 #include "torcontrol.h"
 #include "ui_interface.h"
@@ -44,6 +44,7 @@
 #include "wallet/wallet.h"
 #include "wallet/walletdb.h"
 #endif
+#include "warnings.h"
 #include <stdint.h>
 #include <stdio.h>
 
@@ -56,8 +57,6 @@
 #include <boost/algorithm/string/replace.hpp>
 #include <boost/algorithm/string/split.hpp>
 #include <boost/bind.hpp>
-#include <boost/filesystem.hpp>
-#include <boost/function.hpp>
 #include <boost/interprocess/sync/file_lock.hpp>
 #include <boost/thread.hpp>
 #include <openssl/crypto.h>
@@ -357,7 +356,6 @@ std::string HelpMessage(HelpMessageMode mode)
     strUsage += HelpMessageOpt("-dbcache=<n>", strprintf(_("Set database cache size in megabytes (%d to %d, default: %d)"), nMinDbCache, nMaxDbCache, nDefaultDbCache));
     strUsage += HelpMessageOpt("-loadblock=<file>", _("Imports blocks from external blk000??.dat file on startup"));
     strUsage += HelpMessageOpt("-maxorphantx=<n>", strprintf(_("Keep at most <n> unconnectable transactions in memory (default: %u)"), DEFAULT_MAX_ORPHAN_TRANSACTIONS));
-    strUsage += HelpMessageOpt("-maxtimeadjustment=<n>", strprintf(_("Maximum allowed median peer time offset adjustment, in seconds. Local perspective of time may be influenced by peers forward or backward by this amount. (default: %u seconds, maximum: %u seconds)"), DEFAULT_MAX_TIME_ADJUSTMENT, LIMIT_MAX_TIME_ADJUSTMENT));
     strUsage += HelpMessageOpt("-par=<n>", strprintf(_("Set the number of script verification threads (%u to %d, 0 = auto, <0 = leave that many cores free, default: %d)"),
         -GetNumCores(), MAX_SCRIPTCHECK_THREADS, DEFAULT_SCRIPTCHECK_THREADS));
 #ifndef WIN32
@@ -370,6 +368,7 @@ std::string HelpMessage(HelpMessageMode mode)
 #ifndef WIN32
     strUsage += HelpMessageOpt("-sysperms", _("Create new files with system default permissions, instead of umask 077 (only effective with disabled wallet functionality)"));
 #endif
+    strUsage += HelpMessageOpt("-txexpirynotify=<cmd>", _("Execute command when transaction expires (%s in cmd is replaced by transaction id)"));
     strUsage += HelpMessageOpt("-txindex", strprintf(_("Maintain a full transaction index, used by the getrawtransaction rpc call (default: %u)"), DEFAULT_TXINDEX));
     strUsage += HelpMessageOpt("-ibdskiptxverification", _("Skip Tx verification during initial block download"));
 
@@ -439,6 +438,7 @@ std::string HelpMessage(HelpMessageMode mode)
         strUsage += HelpMessageOpt("-fuzzmessagestest=<n>", "Randomly fuzz 1 of every <n> network messages");
         strUsage += HelpMessageOpt("-stopafterblockimport", strprintf("Stop running after importing blocks from disk (default: %u)", DEFAULT_STOPAFTERBLOCKIMPORT));
         strUsage += HelpMessageOpt("-nuparams=hexBranchId:activationHeight", "Use given activation height for specified network upgrade (regtest-only)");
+        strUsage += HelpMessageOpt("-nurejectoldversions", strprintf("Reject peers that don't know about the current epoch (regtest-only) (default: %u)", DEFAULT_NU_REJECT_OLD_VERSIONS));
     }
     string debugCategories = "addrman, alert, bench, coindb, db, estimatefee, http, libevent, lock, mempool, net, partitioncheck, pow, proxy, prune, "
                              "rand, reindex, rpc, selectcoins, tor, zmq, zrpc, zrpcunsafe (implies zrpc)"; // Don't translate these
@@ -531,6 +531,14 @@ static void BlockNotifyCallback(const uint256& hashNewTip)
     boost::thread t(runCommand, strCmd); // thread runs free
 }
 
+static void TxExpiryNotifyCallback(const uint256& txid)
+{
+    std::string strCmd = GetArg("-txexpirynotify", "");
+
+    boost::replace_all(strCmd, "%s", txid.GetHex());
+    boost::thread t(runCommand, strCmd); // thread runs free
+}
+
 struct CImportingNow
 {
     CImportingNow() {
@@ -594,7 +602,20 @@ void ThreadImport(std::vector<boost::filesystem::path> vImportFiles)
     // -reindex
     if (fReindex) {
         CImportingNow imp;
+        nSizeReindexed = 0;  // will be modified inside LoadExternalBlockFile
+        // Find the summary size of all block files first
         int nFile = 0;
+        size_t fullSize = 0;
+        while (true) {
+            CDiskBlockPos pos(nFile, 0);
+            boost::filesystem::path blkFile = GetBlockPosFilename(pos, "blk");
+            if (!boost::filesystem::exists(blkFile))
+                break; // No block files left to reindex
+            nFile++;
+            fullSize += boost::filesystem::file_size(blkFile);
+        }
+        nFullSizeToReindex = std::max<size_t>(1, fullSize);
+        nFile = 0;
         while (true) {
             CDiskBlockPos pos(nFile, 0);
             if (!boost::filesystem::exists(GetBlockPosFilename(pos, "blk")))
@@ -608,6 +629,8 @@ void ThreadImport(std::vector<boost::filesystem::path> vImportFiles)
         }
         pblocktree->WriteReindexing(false);
         fReindex = false;
+        nSizeReindexed = 0;
+        nFullSizeToReindex = 1;
         LogPrintf("Reindexing finished\n");
         // To avoid ending up in a situation without genesis block, re-try initializing (no-op if reindexing worked):
         InitBlockIndex(chainparams);
@@ -644,25 +667,6 @@ void ThreadImport(std::vector<boost::filesystem::path> vImportFiles)
         LogPrintf("Stopping after block import\n");
         StartShutdown();
     }
-}
-
-bool InitExperimentalMode()
-{
-    fExperimentalMode = GetBoolArg("-experimentalfeatures", false);
-
-    // Fail if user has set experimental options without the global flag
-    if (!fExperimentalMode) {
-        if (mapArgs.count("-developerencryptwallet")) {
-            return InitError(_("Wallet encryption requires -experimentalfeatures."));
-        } else if (mapArgs.count("-developersetpoolsizezero")) {
-            return InitError(_("Setting the size of shielded pools to zero requires -experimentalfeatures."));
-        } else if (mapArgs.count("-paymentdisclosure")) {
-            return InitError(_("Payment disclosure requires -experimentalfeatures."));
-        } else if (mapArgs.count("-insightexplorer")) {
-            return InitError(_("Insight explorer requires -experimentalfeatures."));
-        }
-    }
-    return true;
 }
 
 /** Sanity checks
@@ -866,6 +870,7 @@ bool AppInit2(boost::thread_group& threadGroup, CScheduler& scheduler)
     }
 
     // Clean shutdown on SIGTERM
+    assert(fRequestShutdown.is_lock_free());
     struct sigaction sa;
     sa.sa_handler = HandleSIGTERM;
     sigemptyset(&sa.sa_mask);
@@ -874,6 +879,7 @@ bool AppInit2(boost::thread_group& threadGroup, CScheduler& scheduler)
     sigaction(SIGINT, &sa, NULL);
 
     // Reopen debug.log on SIGHUP
+    assert(fReopenDebugLog.is_lock_free());
     struct sigaction sa_hup;
     sa_hup.sa_handler = HandleSIGHUP;
     sigemptyset(&sa_hup.sa_mask);
@@ -890,11 +896,10 @@ bool AppInit2(boost::thread_group& threadGroup, CScheduler& scheduler)
     const CChainParams& chainparams = Params();
 
     // Set this early so that experimental features are correctly enabled/disabled
-    if (!InitExperimentalMode()) {
-        return false;
+    auto err = InitExperimentalMode();
+    if (err) {
+        return InitError(err.get());
     }
-
-
 
     // Make sure enough file descriptors are available
     int nBind = std::max((int)mapArgs.count("-bind") + (int)mapArgs.count("-whitebind"), 1);
@@ -985,11 +990,6 @@ bool AppInit2(boost::thread_group& threadGroup, CScheduler& scheduler)
         fPruneMode = true;
     }
 
-    int64_t nMaxTimeAdjustment = GetArg("-maxtimeadjustment", DEFAULT_MAX_TIME_ADJUSTMENT);
-    if (nMaxTimeAdjustment < 0 || nMaxTimeAdjustment > LIMIT_MAX_TIME_ADJUSTMENT) {
-        return InitError(strprintf(_("-maxtimeadjustment must be in the range 0 to %u seconds"), LIMIT_MAX_TIME_ADJUSTMENT));
-    }
-
     RegisterAllCoreRPCCommands(tableRPC);
 #ifdef ENABLE_WALLET
     bool fDisableWallet = GetBoolArg("-disablewallet", false);
@@ -1039,9 +1039,15 @@ bool AppInit2(boost::thread_group& threadGroup, CScheduler& scheduler)
     if (mapArgs.count("-mineraddress")) {
         CTxDestination addr = DecodeDestination(mapArgs["-mineraddress"]);
         if (!IsValidDestination(addr)) {
-            return InitError(strprintf(
-                _("Invalid address for -mineraddress=<addr>: '%s' (must be a transparent address)"),
-                mapArgs["-mineraddress"]));
+            // Try a Sapling address
+            auto zaddr = DecodePaymentAddress(mapArgs["-mineraddress"]);
+            if (!IsValidPaymentAddress(zaddr) ||
+                boost::get<libzcash::SaplingPaymentAddress>(&zaddr) == nullptr)
+            {
+                return InitError(strprintf(
+                    _("Invalid address for -mineraddress=<addr>: '%s' (must be a Sapling or transparent address)"),
+                    mapArgs["-mineraddress"]));
+            }
         }
     }
 #endif
@@ -1076,6 +1082,12 @@ bool AppInit2(boost::thread_group& threadGroup, CScheduler& scheduler)
             if (!found) {
                 return InitError(strprintf("Invalid network upgrade (%s)", vDeploymentParams[0]));
             }
+        }
+    }
+
+    if (mapArgs.count("-nurejectoldversions")) {
+        if (Params().NetworkIDString() != "regtest") {
+            return InitError("-nurejectoldversions may only be set on regtest.");
         }
     }
 
@@ -1310,7 +1322,7 @@ bool AppInit2(boost::thread_group& threadGroup, CScheduler& scheduler)
 
         // AMQP support is currently an experimental feature, so fail if user configured AMQP notifications
         // without enabling experimental features.
-        if (!fExperimentalMode) {
+        if (!GetBoolArg("-experimentalfeatures", false)) {
             return InitError(_("AMQP support requires -experimentalfeatures."));
         }
 
@@ -1402,7 +1414,9 @@ bool AppInit2(boost::thread_group& threadGroup, CScheduler& scheduler)
                 }
 
                 // Check for changed -insightexplorer state
-                if (fInsightExplorer != GetBoolArg("-insightexplorer", false)) {
+                bool fInsightExplorerPreviouslySet = false;
+                pblocktree->ReadFlag("insightexplorer", fInsightExplorerPreviouslySet);
+                if (fExperimentalInsightExplorer != fInsightExplorerPreviouslySet) {
                     strLoadError = _("You need to rebuild the database using -reindex to change -insightexplorer");
                     break;
                 }
@@ -1431,7 +1445,7 @@ bool AppInit2(boost::thread_group& threadGroup, CScheduler& scheduler)
                 {
                     LOCK(cs_main);
                     CBlockIndex* tip = chainActive.Tip();
-                    if (tip && tip->nTime > GetAdjustedTime() + 2 * 60 * 60) {
+                    if (tip && tip->nTime > GetTime() + 2 * 60 * 60) {
                         strLoadError = _("The block database contains a block which appears to be from the future. "
                                 "This may be due to your computer's date and time being set incorrectly. "
                                 "Only rebuild the block database if you are sure that your computer's date and time are correct");
@@ -1519,10 +1533,15 @@ bool AppInit2(boost::thread_group& threadGroup, CScheduler& scheduler)
  #ifdef ENABLE_WALLET
         bool minerAddressInLocalWallet = false;
         if (pwalletMain) {
-            // Address has already been validated
             CTxDestination addr = DecodeDestination(mapArgs["-mineraddress"]);
-            CKeyID keyID = boost::get<CKeyID>(addr);
-            minerAddressInLocalWallet = pwalletMain->HaveKey(keyID);
+            if (IsValidDestination(addr)) {
+                CKeyID keyID = boost::get<CKeyID>(addr);
+                minerAddressInLocalWallet = pwalletMain->HaveKey(keyID);
+            } else {
+                auto zaddr = DecodePaymentAddress(mapArgs["-mineraddress"]);
+                minerAddressInLocalWallet = boost::apply_visitor(
+                    HaveSpendingKeyForPaymentAddress(pwalletMain), zaddr);
+            }
         }
         if (GetBoolArg("-minetolocalwallet", true) && !minerAddressInLocalWallet) {
             return InitError(_("-mineraddress is not in the local wallet. Either use a local address, or set -minetolocalwallet=0"));
@@ -1531,21 +1550,40 @@ bool AppInit2(boost::thread_group& threadGroup, CScheduler& scheduler)
 
         // This is leveraging the fact that boost::signals2 executes connected
         // handlers in-order. Further up, the wallet is connected to this signal
-        // if the wallet is enabled. The wallet's ScriptForMining handler does
-        // nothing if -mineraddress is set, and GetScriptForMinerAddress() does
-        // nothing if -mineraddress is not set (or set to an invalid address).
+        // if the wallet is enabled. The wallet's AddressForMining handler does
+        // nothing if -mineraddress is set, and GetMinerAddress() does nothing
+        // if -mineraddress is not set (or set to an address that is not valid
+        // for mining).
         //
-        // The upshot is that when ScriptForMining(script) is called:
+        // The upshot is that when AddressForMining(address) is called:
         // - If -mineraddress is set (whether or not the wallet is enabled), the
-        //   CScript argument is set to -mineraddress.
-        // - If the wallet is enabled and -mineraddress is not set, the CScript
-        //   argument is set to a wallet address.
-        // - If the wallet is disabled and -mineraddress is not set, the CScript
+        //   argument is set to -mineraddress.
+        // - If the wallet is enabled and -mineraddress is not set, the argument
+        //   is set to a wallet address.
+        // - If the wallet is disabled and -mineraddress is not set, the
         //   argument is not modified; in practice this means it is empty, and
         //   GenerateBitcoins() returns an error.
-        GetMainSignals().ScriptForMining.connect(GetScriptForMinerAddress);
+        GetMainSignals().AddressForMining.connect(GetMinerAddress);
     }
 #endif // ENABLE_MINING
+
+    // Start the thread that notifies listeners of transactions that have been
+    // recently added to the mempool, or have been added to or removed from the
+    // chain. We perform this before step 10 (import blocks) so that the
+    // original value of chainActive.Tip(), which corresponds with the wallet's
+    // view of the chaintip, is passed to ThreadNotifyWallets before the chain
+    // tip changes again.
+    {
+        CBlockIndex *pindexLastTip;
+        {
+            LOCK(cs_main);
+            pindexLastTip = chainActive.Tip();
+        }
+        boost::function<void()> threadnotifywallets = boost::bind(&ThreadNotifyWallets, pindexLastTip);
+        threadGroup.create_thread(
+            boost::bind(&TraceThread<boost::function<void()>>, "txnotify", threadnotifywallets)
+        );
+    }
 
     // ********************************************************* Step 9: data directory maintenance
 
@@ -1565,6 +1603,9 @@ bool AppInit2(boost::thread_group& threadGroup, CScheduler& scheduler)
     if (mapArgs.count("-blocknotify"))
         uiInterface.NotifyBlockTip.connect(BlockNotifyCallback);
 
+    if (mapArgs.count("-txexpirynotify"))
+        uiInterface.NotifyTxExpiration.connect(TxExpiryNotifyCallback);
+
     uiInterface.InitMessage(_("Activating best chain..."));
     // scan for better chains in the block chain database, that are not yet connected in the active best chain
     CValidationState state;
@@ -1578,10 +1619,21 @@ bool AppInit2(boost::thread_group& threadGroup, CScheduler& scheduler)
             vImportFiles.push_back(strFile);
     }
     threadGroup.create_thread(boost::bind(&ThreadImport, vImportFiles));
-    if (chainActive.Tip() == NULL) {
-        LogPrintf("Waiting for genesis block to be imported...\n");
-        while (!fRequestShutdown && chainActive.Tip() == NULL)
+
+    // Wait for genesis block to be processed
+    bool fHaveGenesis = false;
+    while (!fHaveGenesis && !fRequestShutdown) {
+        {
+            LOCK(cs_main);
+            fHaveGenesis = (chainActive.Tip() != NULL);
+        }
+
+        if (!fHaveGenesis) {
             MilliSleep(10);
+        }
+    }
+    if (!fHaveGenesis) {
+        return false;
     }
 
     // ********************************************************* Step 11: start node
@@ -1593,18 +1645,20 @@ bool AppInit2(boost::thread_group& threadGroup, CScheduler& scheduler)
         return InitError(strErrors.str());
 
     //// debug print
-    LogPrintf("mapBlockIndex.size() = %u\n",   mapBlockIndex.size());
-    LogPrintf("nBestHeight = %d\n",                   chainActive.Height());
+    {
+        LOCK(cs_main);
+        LogPrintf("mapBlockIndex.size() = %u\n", mapBlockIndex.size());
+        LogPrintf("nBestHeight = %d\n", chainActive.Height());
+    }
 #ifdef ENABLE_WALLET
-    LogPrintf("setKeyPool.size() = %u\n",      pwalletMain ? pwalletMain->setKeyPool.size() : 0);
-    LogPrintf("mapWallet.size() = %u\n",       pwalletMain ? pwalletMain->mapWallet.size() : 0);
-    LogPrintf("mapAddressBook.size() = %u\n",  pwalletMain ? pwalletMain->mapAddressBook.size() : 0);
+    if (pwalletMain)
+    {
+        LOCK(pwalletMain->cs_wallet);
+        LogPrintf("setKeyPool.size() = %u\n",      pwalletMain->setKeyPool.size());
+        LogPrintf("mapWallet.size() = %u\n",       pwalletMain->mapWallet.size());
+        LogPrintf("mapAddressBook.size() = %u\n",  pwalletMain->mapAddressBook.size());
+    }
 #endif
-
-    // Start the thread that notifies listeners of transactions that have been
-    // recently added to the mempool, or have been added to or removed from the
-    // chain.
-    threadGroup.create_thread(boost::bind(&TraceThread<void (*)()>, "txnotify", &ThreadNotifyWallets));
 
     if (GetBoolArg("-listenonion", DEFAULT_LISTEN_ONION))
         StartTorControl(threadGroup, scheduler);
