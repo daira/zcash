@@ -8,17 +8,15 @@ mkdir -p artifacts/linux
 mkdir -p artifacts/win
 
 # Build for Mac
-make clean
-CONFIGURE_FLAGS="--disable-tests --disable-mining --disable-bench" ./zcutil/build.sh -j$(nproc)
-strip src/zcashd
-cp src/zcashd artifacts/mac
+if [[ "$OSTYPE" == "darwin"* ]]; then
+    make clean
+    CONFIGURE_FLAGS="--disable-tests --disable-mining --disable-bench" ./zcutil/build.sh -j$(nproc)
+    strip src/zcashd
+    cp src/zcashd artifacts/mac
+fi
 
 # Build for linux in docker
-make clean
-docker run --rm -v $(pwd):/opt/zcash adityapk00/zcash:latest bash -c "cd /opt/zcash && CONFIGURE_FLAGS=\"--disable-tests --disable-mining\" ./zcutil/build.sh -j$(nproc) && strip src/zcashd"
-cp src/zcashd artifacts/linux
+docker run --rm -v $(pwd):/opt/zcash adityapk00/zcash:latest bash -c "cd /opt/zcash-linux && git pull && CONFIGURE_FLAGS=\"--disable-tests --disable-mining --disable-bench\" ./zcutil/build.sh -j$(nproc) && strip src/zcashd && cp src/zcashd /opt/zcash/artifacts/linux/"
 
 # Build for win in docker
-make clean
-docker run --rm -v $(pwd):/opt/zcash adityapk00/zcash:latest bash -c "cd /opt/zcash && CONFIGURE_FLAGS=\"--disable-tests --disable-mining\" HOST=x86_64-w64-mingw32 ./zcutil/build.sh -j$(nproc) && strip src/zcashd.exe"
-cp src/zcashd.exe artifacts/win
+docker run --rm -v $(pwd):/opt/zcash adityapk00/zcash:latest bash -c "cd /opt/zcash-win && git pull && CONFIGURE_FLAGS=\"--disable-tests --disable-mining --disable-bench\" HOST=x86_64-w64-mingw32 ./zcutil/build.sh -j$(nproc) && strip src/zcashd.exe && cp src/zcashd.exe /opt/zcash/artifacts/win/"
