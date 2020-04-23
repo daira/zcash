@@ -2,8 +2,8 @@ dnl require autoconf 2.60 (AS_ECHO/AS_ECHO_N)
 AC_PREREQ([2.60])
 define(_CLIENT_VERSION_MAJOR, 2)
 define(_CLIENT_VERSION_MINOR, 1)
-define(_CLIENT_VERSION_REVISION, 1)
-define(_CLIENT_VERSION_BUILD, 51)
+define(_CLIENT_VERSION_REVISION, 2)
+define(_CLIENT_VERSION_BUILD, 50)
 define(_ZC_BUILD_VAL, m4_if(m4_eval(_CLIENT_VERSION_BUILD < 25), 1, m4_incr(_CLIENT_VERSION_BUILD), m4_eval(_CLIENT_VERSION_BUILD < 50), 1, m4_eval(_CLIENT_VERSION_BUILD - 24), m4_eval(_CLIENT_VERSION_BUILD == 50), 1, , m4_eval(_CLIENT_VERSION_BUILD - 50)))
 define(_CLIENT_VERSION_SUFFIX, m4_if(m4_eval(_CLIENT_VERSION_BUILD < 25), 1, _CLIENT_VERSION_REVISION-beta$1, m4_eval(_CLIENT_VERSION_BUILD < 50), 1, _CLIENT_VERSION_REVISION-rc$1, m4_eval(_CLIENT_VERSION_BUILD == 50), 1, _CLIENT_VERSION_REVISION, _CLIENT_VERSION_REVISION-$1)))
 define(_CLIENT_VERSION_IS_RELEASE, true)
@@ -77,11 +77,20 @@ AC_PATH_TOOL(GCOV, gcov)
 AC_PATH_PROG(LCOV, lcov)
 AC_PATH_PROG(GENHTML, genhtml)
 AC_PATH_PROG([GIT], [git])
+AC_PATH_PROG(RUSTC, rustc)
+AC_PATH_PROG(CARGO, cargo)
 AC_PATH_PROG(CCACHE,ccache)
 AC_PATH_PROG(XGETTEXT,xgettext)
 AC_PATH_PROG(HEXDUMP,hexdump)
 AC_PATH_TOOL(READELF,readelf)
 AC_PATH_TOOL(CPPFILT,c++filt)
+
+AC_ARG_ENABLE([online-rust],
+  [AS_HELP_STRING([--enable-online-rust],
+  [enable Rust to fetch dependencies from the network (default is to use vendored dependencies)])],
+  [enable_online_rust=$enableval],
+  [enable_online_rust=no])
+AM_CONDITIONAL(ENABLE_ONLINE_RUST, test "$enable_online_rust" != no)
 
 # Enable wallet
 AC_ARG_ENABLE([wallet],
@@ -97,10 +106,10 @@ AC_ARG_ENABLE([mining],
   [enable_mining=yes])
 
 AC_ARG_ENABLE([proton],
-  [AS_HELP_STRING([--disable-proton],
-  [disable Proton (AMQP messaging)])],
+  [AS_HELP_STRING([--enable-proton],
+  [enable Proton (AMQP messaging) (default is no)])],
   [use_proton=$enableval],
-  [use_proton=yes])
+  [use_proton=no])
 
 AC_ARG_ENABLE(tests,
     AS_HELP_STRING([--disable-tests],[do not compile tests (default is to compile)]),
@@ -211,6 +220,12 @@ if test "x$enable_debug" = xyes; then
   AX_CHECK_PREPROC_FLAG([-DDEBUG],[[DEBUG_CPPFLAGS="$DEBUG_CPPFLAGS -DDEBUG"]],,[[$CXXFLAG_WERROR]])
   AX_CHECK_PREPROC_FLAG([-DDEBUG_LOCKORDER],[[DEBUG_CPPFLAGS="$DEBUG_CPPFLAGS -DDEBUG_LOCKORDER"]],,[[$CXXFLAG_WERROR]])
   AX_CHECK_COMPILE_FLAG([-ftrapv],[DEBUG_CXXFLAGS="$DEBUG_CXXFLAGS -ftrapv"],,[[$CXXFLAG_WERROR]])
+else
+  # Even with enable_debug=no we build with standard debug symbols
+  AX_CHECK_COMPILE_FLAG([-g],[[DEBUG_CXXFLAGS="$DEBUG_CXXFLAGS -g"]],,[[$CXXFLAG_WERROR]])
+
+  # -ftrapv and -fwrapv conflict, so we only set this if enable_debug=no
+  AX_CHECK_COMPILE_FLAG([-fwrapv],[CXXFLAGS="$CXXFLAGS -fwrapv"],,[[$CXXFLAG_WERROR]])
 fi
 
 if test x$use_sanitizers != x; then
@@ -803,9 +818,10 @@ else
   fi
 fi
 
-RUST_LIBS="-lrustzcash"
+RUST_LIBS=""
 case $host in
   *mingw*)
+    RUST_LIBS="$RUST_LIBS -luserenv"
     ;;
   *)
     RUST_LIBS="$RUST_LIBS -ldl"
@@ -813,7 +829,6 @@ case $host in
 esac
 
 # Additional Zcash flags
-AX_CHECK_COMPILE_FLAG([-fwrapv],[CXXFLAGS="$CXXFLAGS -fwrapv"])
 AX_CHECK_COMPILE_FLAG([-fno-strict-aliasing],[CXXFLAGS="$CXXFLAGS -fno-strict-aliasing"])
 AX_CHECK_COMPILE_FLAG([-Wno-builtin-declaration-mismatch],[CXXFLAGS="$CXXFLAGS -Wno-builtin-declaration-mismatch"],,[[$CXXFLAG_WERROR]])
 
@@ -928,6 +943,8 @@ AC_SUBST(BITCOIN_DAEMON_NAME)
 AC_SUBST(BITCOIN_CLI_NAME)
 AC_SUBST(BITCOIN_TX_NAME)
 
+AC_SUBST(RUST_TARGET)
+AC_SUBST(RUST_VENDORED_SOURCES)
 AC_SUBST(RELDFLAGS)
 AC_SUBST(DEBUG_CPPFLAGS)
 AC_SUBST(DEBUG_CXXFLAGS)

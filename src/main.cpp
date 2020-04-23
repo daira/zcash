@@ -1,5 +1,6 @@
 // Copyright (c) 2009-2010 Satoshi Nakamoto
 // Copyright (c) 2009-2014 The Bitcoin Core developers
+// Copyright (c) 2015-2020 The Zcash developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or https://www.opensource.org/licenses/mit-license.php .
 
@@ -17,6 +18,7 @@
 #include "consensus/upgrades.h"
 #include "consensus/validation.h"
 #include "deprecation.h"
+#include "experimental_features.h"
 #include "init.h"
 #include "merkleblock.h"
 #include "metrics.h"
@@ -31,6 +33,7 @@
 #include "validationinterface.h"
 #include "wallet/asyncrpcoperation_sendmany.h"
 #include "wallet/asyncrpcoperation_shieldcoinbase.h"
+#include "warnings.h"
 
 #include <algorithm>
 #include <atomic>
@@ -64,12 +67,10 @@ static int64_t nTimeBestReceived = 0;
 CWaitableCriticalSection csBestBlock;
 CConditionVariable cvBlockChange;
 int nScriptCheckThreads = 0;
-bool fExperimentalMode = false;
 bool fImporting = false;
-bool fReindex = false;
+std::atomic_bool fReindex(false);
 bool fTxIndex = false;
-bool fInsightExplorer = false;  // insightexplorer
-bool fAddressIndex = false;     // insightexplorer
+bool fAddressIndex = false;     // insightexplorer || lightwalletd
 bool fSpentIndex = false;       // insightexplorer
 bool fTimestampIndex = false;   // insightexplorer
 bool fHavePruned = false;
@@ -116,7 +117,7 @@ namespace {
     /** Abort with a message */
     bool AbortNode(const std::string& strMessage, const std::string& userMessage="")
     {
-        strMiscWarning = strMessage;
+        SetMiscWarning(strMessage);
         LogPrintf("*** %s\n", strMessage);
         uiInterface.ThreadSafeMessageBox(
             userMessage.empty() ? _("Error: A fatal internal error occurred, see debug.log for details") : userMessage,
@@ -722,7 +723,7 @@ bool CheckFinalTx(const CTransaction &tx, int flags)
     // However this changes once median past time-locks are enforced:
     const int64_t nBlockTime = (flags & LOCKTIME_MEDIAN_TIME_PAST)
                              ? chainActive.Tip()->GetMedianTimePast()
-                             : GetAdjustedTime();
+                             : GetTime();
 
     return IsFinalTx(tx, nBlockHeight, nBlockTime);
 }
@@ -790,6 +791,7 @@ bool ContextualCheckTransaction(
     bool overwinterActive = chainparams.GetConsensus().NetworkUpgradeActive(nHeight, Consensus::UPGRADE_OVERWINTER);
     bool saplingActive = chainparams.GetConsensus().NetworkUpgradeActive(nHeight, Consensus::UPGRADE_SAPLING);
     bool isSprout = !overwinterActive;
+    bool heartwoodActive = chainparams.GetConsensus().NetworkUpgradeActive(nHeight, Consensus::UPGRADE_HEARTWOOD);
 
     // If Sprout rules apply, reject transactions which are intended for Overwinter and beyond
     if (isSprout && tx.fOverwintered) {
@@ -886,17 +888,68 @@ bool ContextualCheckTransaction(
                 REJECT_INVALID, "bad-txns-oversize");
     }
 
+    // Rules that apply before Heartwood:
+    if (!heartwoodActive) {
+        if (tx.IsCoinBase()) {
+            // A coinbase transaction cannot have output descriptions
+            if (tx.vShieldedOutput.size() > 0)
+                return state.DoS(
+                    dosLevelPotentiallyRelaxing,
+                    error("CheckTransaction(): coinbase has output descriptions"),
+                    REJECT_INVALID, "bad-cb-has-output-description");
+        }
+    }
+
+    // Rules that apply to Heartwood or later:
+    if (heartwoodActive) {
+        if (tx.IsCoinBase()) {
+            // All Sapling outputs in coinbase transactions MUST have valid note commitments
+            // when recovered using a 32-byte array of zeroes as the outgoing viewing key.
+            // https://zips.z.cash/zip-0213#specification
+            uint256 ovk;
+            for (const OutputDescription &output : tx.vShieldedOutput) {
+                auto outPlaintext = SaplingOutgoingPlaintext::decrypt(
+                    output.outCiphertext, ovk, output.cv, output.cmu, output.ephemeralKey);
+                if (!outPlaintext) {
+                    return state.DoS(
+                        DOS_LEVEL_BLOCK,
+                        error("CheckTransaction(): coinbase output description has invalid outCiphertext"),
+                        REJECT_INVALID,
+                        "bad-cb-output-desc-invalid-outct");
+                }
+
+                // SaplingNotePlaintext::decrypt() checks note commitment validity.
+                if (!SaplingNotePlaintext::decrypt(
+                    output.encCiphertext,
+                    output.ephemeralKey,
+                    outPlaintext->esk,
+                    outPlaintext->pk_d,
+                    output.cmu)
+                ) {
+                    return state.DoS(
+                        DOS_LEVEL_BLOCK,
+                        error("CheckTransaction(): coinbase output description has invalid encCiphertext"),
+                        REJECT_INVALID,
+                        "bad-cb-output-desc-invalid-encct");
+                }
+            }
+        }
+    }
+
+    auto consensusBranchId = CurrentEpochBranchId(nHeight, chainparams.GetConsensus());
+    auto prevConsensusBranchId = PrevEpochBranchId(consensusBranchId, chainparams.GetConsensus());
     uint256 dataToBeSigned;
+    uint256 prevDataToBeSigned;
 
     if (!tx.vJoinSplit.empty() ||
         !tx.vShieldedSpend.empty() ||
         !tx.vShieldedOutput.empty())
     {
-        auto consensusBranchId = CurrentEpochBranchId(nHeight, chainparams.GetConsensus());
         // Empty output script.
         CScript scriptCode;
         try {
             dataToBeSigned = SignatureHash(scriptCode, tx, NOT_AN_INPUT, SIGHASH_ALL, 0, consensusBranchId);
+            prevDataToBeSigned = SignatureHash(scriptCode, tx, NOT_AN_INPUT, SIGHASH_ALL, 0, prevConsensusBranchId);
         } catch (std::logic_error ex) {
             // A logic error should never occur because we pass NOT_AN_INPUT and
             // SIGHASH_ALL to SignatureHash().
@@ -915,6 +968,21 @@ bool ContextualCheckTransaction(
                                         dataToBeSigned.begin(), 32,
                                         tx.joinSplitPubKey.begin()
                                         ) != 0) {
+            // Check whether the failure was caused by an outdated consensus
+            // branch ID; if so, inform the node that they need to upgrade. We
+            // only check the previous epoch's branch ID, on the assumption that
+            // users creating transactions will notice their transactions
+            // failing before a second network upgrade occurs.
+            if (crypto_sign_verify_detached(&tx.joinSplitSig[0],
+                                            prevDataToBeSigned.begin(), 32,
+                                            tx.joinSplitPubKey.begin()
+                                            ) == 0) {
+                return state.DoS(
+                    dosLevelPotentiallyRelaxing, false, REJECT_INVALID, strprintf(
+                        "old-consensus-branch-id (Expected %s, found %s)",
+                        HexInt(consensusBranchId),
+                        HexInt(prevConsensusBranchId)));
+            }
             return state.DoS(
                 dosLevelPotentiallyRelaxing,
                 error("CheckTransaction(): invalid joinsplit signature"),
@@ -951,7 +1019,7 @@ bool ContextualCheckTransaction(
             if (!librustzcash_sapling_check_output(
                 ctx,
                 output.cv.begin(),
-                output.cm.begin(),
+                output.cmu.begin(),
                 output.ephemeralKey.begin(),
                 output.zkproof.begin()
             ))
@@ -1218,13 +1286,11 @@ bool CheckTransactionWithoutProofVerification(const CTransaction& tx, CValidatio
             return state.DoS(100, error("CheckTransaction(): coinbase has joinsplits"),
                              REJECT_INVALID, "bad-cb-has-joinsplits");
 
-        // A coinbase transaction cannot have spend descriptions or output descriptions
+        // A coinbase transaction cannot have spend descriptions
         if (tx.vShieldedSpend.size() > 0)
             return state.DoS(100, error("CheckTransaction(): coinbase has spend descriptions"),
                              REJECT_INVALID, "bad-cb-has-spend-description");
-        if (tx.vShieldedOutput.size() > 0)
-            return state.DoS(100, error("CheckTransaction(): coinbase has output descriptions"),
-                             REJECT_INVALID, "bad-cb-has-output-description");
+        // See ContextualCheckTransaction for consensus rules on coinbase output descriptions.
 
         if (tx.vin[0].scriptSig.size() < 2 || tx.vin[0].scriptSig.size() > 100)
             return state.DoS(100, error("CheckTransaction(): coinbase script size"),
@@ -1279,6 +1345,8 @@ bool AcceptToMemoryPool(CTxMemPool& pool, CValidationState &state, const CTransa
         *pfMissingInputs = false;
 
     int nextBlockHeight = chainActive.Height() + 1;
+
+    // Grab the branch ID we expect this transaction to commit to.
     auto consensusBranchId = CurrentEpochBranchId(nextBlockHeight, Params().GetConsensus());
 
     if (pool.IsRecentlyEvicted(tx.GetHash())) {
@@ -1427,11 +1495,9 @@ bool AcceptToMemoryPool(CTxMemPool& pool, CValidationState &state, const CTransa
             }
         }
 
-        // Grab the branch ID we expect this transaction to commit to. We don't
-        // yet know if it does, but if the entry gets added to the mempool, then
-        // it has passed ContextualCheckInputs and therefore this is correct.
-        auto consensusBranchId = CurrentEpochBranchId(chainActive.Height() + 1, Params().GetConsensus());
-
+        // We don't yet know if the transaction commits to consensusBranchId,
+        // but if the entry gets added to the mempool, then it has passed
+        // ContextualCheckInputs and therefore this is correct.
         CTxMemPoolEntry entry(tx, nFees, GetTime(), dPriority, chainActive.Height(), mempool.HasNoInputsOf(tx), fSpendsCoinbase, consensusBranchId);
         unsigned int nSize = entry.GetTxSize();
 
@@ -1674,7 +1740,7 @@ bool WriteBlockToDisk(const CBlock& block, CDiskBlockPos& pos, const CMessageHea
     return true;
 }
 
-bool ReadBlockFromDisk(CBlock& block, const CDiskBlockPos& pos, const Consensus::Params& consensusParams)
+bool ReadBlockFromDisk(CBlock& block, const CDiskBlockPos& pos, int nHeight, const Consensus::Params& consensusParams)
 {
     block.SetNull();
 
@@ -1692,7 +1758,7 @@ bool ReadBlockFromDisk(CBlock& block, const CDiskBlockPos& pos, const Consensus:
     }
 
     // Check the header
-    if (!(CheckEquihashSolution(&block, consensusParams) &&
+    if (!(CheckEquihashSolution(&block, nHeight, consensusParams) &&
           CheckProofOfWork(block.GetHash(), block.nBits, consensusParams)))
         return error("ReadBlockFromDisk: Errors in block header at %s", pos.ToString());
 
@@ -1701,7 +1767,7 @@ bool ReadBlockFromDisk(CBlock& block, const CDiskBlockPos& pos, const Consensus:
 
 bool ReadBlockFromDisk(CBlock& block, const CBlockIndex* pindex, const Consensus::Params& consensusParams)
 {
-    if (!ReadBlockFromDisk(block, pindex->GetBlockPos(), consensusParams))
+    if (!ReadBlockFromDisk(block, pindex->GetBlockPos(), pindex->nHeight, consensusParams))
         return false;
     if (block.GetHash() != pindex->GetBlockHash())
         return error("ReadBlockFromDisk(CBlock&, CBlockIndex*): GetHash() doesn't match index for %s at %s",
@@ -1795,8 +1861,6 @@ bool IsInitialBlockDownload(const CChainParams& chainParams)
     return false;
 }
 
-static bool fLargeWorkForkFound = false;
-static bool fLargeWorkInvalidChainFound = false;
 static CBlockIndex *pindexBestForkTip = NULL;
 static CBlockIndex *pindexBestForkBase = NULL;
 
@@ -1815,7 +1879,7 @@ void CheckForkWarningConditions(const CChainParams& chainParams)
 
     if (pindexBestForkTip || (pindexBestInvalid && pindexBestInvalid->nChainWork > chainActive.Tip()->nChainWork + (GetBlockProof(*chainActive.Tip()) * 6)))
     {
-        if (!fLargeWorkForkFound && pindexBestForkBase)
+        if (!GetfLargeWorkForkFound() && pindexBestForkBase)
         {
             std::string warning = std::string("'Warning: Large-work fork detected, forking after block ") +
                 pindexBestForkBase->phashBlock->ToString() + std::string("'");
@@ -1826,20 +1890,20 @@ void CheckForkWarningConditions(const CChainParams& chainParams)
             LogPrintf("%s: Warning: Large valid fork found\n  forking the chain at height %d (%s)\n  lasting to height %d (%s).\nChain state database corruption likely.\n", __func__,
                    pindexBestForkBase->nHeight, pindexBestForkBase->phashBlock->ToString(),
                    pindexBestForkTip->nHeight, pindexBestForkTip->phashBlock->ToString());
-            fLargeWorkForkFound = true;
+            SetfLargeWorkForkFound(true);
         }
         else
         {
             std::string warning = std::string("Warning: Found invalid chain at least ~6 blocks longer than our best chain.\nChain state database corruption likely.");
             LogPrintf("%s: %s\n", warning.c_str(), __func__);
             CAlert::Notify(warning, true);
-            fLargeWorkInvalidChainFound = true;
+            SetfLargeWorkInvalidChainFound(true);
         }
     }
     else
     {
-        fLargeWorkForkFound = false;
-        fLargeWorkInvalidChainFound = false;
+        SetfLargeWorkForkFound(false);
+        SetfLargeWorkInvalidChainFound(false);
     }
 }
 
@@ -2093,6 +2157,22 @@ bool ContextualCheckInputs(
                     pvChecks->push_back(CScriptCheck());
                     check.swap(pvChecks->back());
                 } else if (!check()) {
+                    // Check whether the failure was caused by an outdated
+                    // consensus branch ID; if so, don't trigger DoS protection
+                    // immediately, and inform the node that they need to
+                    // upgrade. We only check the previous epoch's branch ID, on
+                    // the assumption that users creating transactions will
+                    // notice their transactions failing before a second network
+                    // upgrade occurs.
+                    auto prevConsensusBranchId = PrevEpochBranchId(consensusBranchId, consensusParams);
+                    CScriptCheck checkPrev(*coins, tx, i, flags, cacheStore, prevConsensusBranchId, &txdata);
+                    if (checkPrev()) {
+                        return state.DoS(
+                            10, false, REJECT_INVALID, strprintf(
+                                "old-consensus-branch-id (Expected %s, found %s)",
+                                HexInt(consensusBranchId),
+                                HexInt(prevConsensusBranchId)));
+                    }
                     if (flags & STANDARD_NOT_MANDATORY_VERIFY_FLAGS) {
                         // Check whether the failure was caused by a
                         // non-mandatory script verification check, such as
@@ -2107,11 +2187,7 @@ bool ContextualCheckInputs(
                     }
                     // Failures of other flags indicate a transaction that is
                     // invalid in new blocks, e.g. a invalid P2SH. We DoS ban
-                    // such nodes as they are not following the protocol. That
-                    // said during an upgrade careful thought should be taken
-                    // as to the correct behavior - we may want to continue
-                    // peering with non-upgraded nodes even after a soft-fork
-                    // super-majority vote has passed.
+                    // such nodes as they are not following the protocol.
                     return state.DoS(100,false, REJECT_INVALID, strprintf("mandatory-script-verify-flag-failed (%s)", ScriptErrorString(check.GetScriptError())));
                 }
             }
@@ -2357,6 +2433,12 @@ static DisconnectResult DisconnectBlock(const CBlock& block, CValidationState& s
         view.PopAnchor(SaplingMerkleTree::empty_root(), SAPLING);
     }
 
+    auto consensusBranchId = CurrentEpochBranchId(pindex->nHeight, chainparams.GetConsensus());
+
+    if (chainparams.GetConsensus().NetworkUpgradeActive(pindex->nHeight, Consensus::UPGRADE_HEARTWOOD)) {
+        view.PopHistoryNode(consensusBranchId);
+    }
+
     // move best block pointer to prevout block
     view.SetBestBlock(pindex->pprev->GetBlockHash());
 
@@ -2423,7 +2505,7 @@ void PartitionCheck(bool (*initialDownloadCheck)(const CChainParams&),
     if (bestHeader == NULL || initialDownloadCheck(Params())) return;
 
     static int64_t lastAlertTime = 0;
-    int64_t now = GetAdjustedTime();
+    int64_t now = GetTime();
     if (lastAlertTime > now-60*60*24) return; // Alert at most once per day
 
     const int SPAN_HOURS=4;
@@ -2450,7 +2532,7 @@ void PartitionCheck(bool (*initialDownloadCheck)(const CChainParams&),
     boost::math::poisson_distribution<double> poisson(BLOCKS_EXPECTED);
 
     std::string strWarning;
-    int64_t startTime = GetAdjustedTime()-SPAN_SECONDS;
+    int64_t startTime = GetTime() - SPAN_SECONDS;
 
     const CBlockIndex* i = bestHeader;
     int nBlocks = 0;
@@ -2484,7 +2566,7 @@ void PartitionCheck(bool (*initialDownloadCheck)(const CChainParams&),
     }
     if (!strWarning.empty())
     {
-        strMiscWarning = strWarning;
+        SetMiscWarning(strWarning);
         CAlert::Notify(strWarning, true);
         lastAlertTime = now;
     }
@@ -2614,8 +2696,11 @@ bool ConnectBlock(const CBlock& block, CValidationState& state, CBlockIndex* pin
     SaplingMerkleTree sapling_tree;
     assert(view.GetSaplingAnchorAt(view.GetBestAnchor(SAPLING), sapling_tree));
 
-    // Grab the consensus branch ID for the block's height
+    // Grab the consensus branch ID for this block and its parent
     auto consensusBranchId = CurrentEpochBranchId(pindex->nHeight, chainparams.GetConsensus());
+    auto prevConsensusBranchId = CurrentEpochBranchId(pindex->nHeight - 1, chainparams.GetConsensus());
+
+    size_t total_sapling_tx = 0;
 
     std::vector<PrecomputedTransactionData> txdata;
     txdata.reserve(block.vtx.size()); // Required so that pointers to individual PrecomputedTransactionData don't get invalidated
@@ -2732,7 +2817,11 @@ bool ConnectBlock(const CBlock& block, CValidationState& state, CBlockIndex* pin
         }
 
         BOOST_FOREACH(const OutputDescription &outputDescription, tx.vShieldedOutput) {
-            sapling_tree.append(outputDescription.cm);
+            sapling_tree.append(outputDescription.cmu);
+        }
+
+        if (!(tx.vShieldedSpend.empty() && tx.vShieldedOutput.empty())) {
+            total_sapling_tx += 1;
         }
 
         vPos.push_back(std::make_pair(tx.GetHash(), pos));
@@ -2743,17 +2832,64 @@ bool ConnectBlock(const CBlock& block, CValidationState& state, CBlockIndex* pin
     view.PushAnchor(sapling_tree);
     if (!fJustCheck) {
         pindex->hashFinalSproutRoot = sprout_tree.root();
+        // - If this block is before Heartwood activation, then we don't set
+        //   hashFinalSaplingRoot here to maintain the invariant documented in
+        //   CBlockIndex (which was ensured in AddToBlockIndex).
+        // - If this block is on or after Heartwood activation, this is where we
+        //   set the correct value of hashFinalSaplingRoot; in particular,
+        //   blocks that are never passed to ConnectBlock() (and thus never on
+        //   the main chain) will stay with hashFinalSaplingRoot set to null.
+        if (chainparams.GetConsensus().NetworkUpgradeActive(pindex->nHeight, Consensus::UPGRADE_HEARTWOOD)) {
+            pindex->hashFinalSaplingRoot = sapling_tree.root();
+        }
     }
     blockundo.old_sprout_tree_root = old_sprout_tree_root;
 
-    // If Sapling is active, block.hashFinalSaplingRoot must be the
-    // same as the root of the Sapling tree
-    if (chainparams.GetConsensus().NetworkUpgradeActive(pindex->nHeight, Consensus::UPGRADE_SAPLING)) {
-        if (block.hashFinalSaplingRoot != sapling_tree.root()) {
+    if (IsActivationHeight(pindex->nHeight, chainparams.GetConsensus(), Consensus::UPGRADE_HEARTWOOD)) {
+        // In the block that activates ZIP 221, block.hashLightClientRoot MUST
+        // be set to all zero bytes.
+        if (!block.hashLightClientRoot.IsNull()) {
             return state.DoS(100,
-                         error("ConnectBlock(): block's hashFinalSaplingRoot is incorrect"),
-                               REJECT_INVALID, "bad-sapling-root-in-block");
+                error("ConnectBlock(): block's hashLightClientRoot is incorrect (should be null)"),
+                REJECT_INVALID, "bad-heartwood-root-in-block");
         }
+    } else if (chainparams.GetConsensus().NetworkUpgradeActive(pindex->nHeight, Consensus::UPGRADE_HEARTWOOD)) {
+        // If Heartwood is active, block.hashLightClientRoot must be the same as
+        // the root of the history tree for the previous block. We only store
+        // one tree per epoch, so we have two possible cases:
+        // - If the previous block is in the previous epoch, this block won't
+        //   affect that epoch's tree root.
+        // - If the previous block is in this epoch, this block would affect
+        //   this epoch's tree root, but as we haven't updated the tree for this
+        //   block yet, view.GetHistoryRoot() returns the root we need.
+        if (block.hashLightClientRoot != view.GetHistoryRoot(prevConsensusBranchId)) {
+            return state.DoS(100,
+                error("ConnectBlock(): block's hashLightClientRoot is incorrect (should be history tree root)"),
+                REJECT_INVALID, "bad-heartwood-root-in-block");
+        }
+    } else if (chainparams.GetConsensus().NetworkUpgradeActive(pindex->nHeight, Consensus::UPGRADE_SAPLING)) {
+        // If Sapling is active, block.hashLightClientRoot must be the
+        // same as the root of the Sapling tree
+        if (block.hashLightClientRoot != sapling_tree.root()) {
+            return state.DoS(100,
+                error("ConnectBlock(): block's hashLightClientRoot is incorrect (should be Sapling tree root)"),
+                REJECT_INVALID, "bad-sapling-root-in-block");
+        }
+    }
+
+    // History read/write is started with Heartwood update.
+    if (chainparams.GetConsensus().NetworkUpgradeActive(pindex->nHeight, Consensus::UPGRADE_HEARTWOOD)) {
+        auto historyNode = libzcash::NewLeaf(
+            block.GetHash(),
+            block.nTime,
+            block.nBits,
+            pindex->hashFinalSaplingRoot,
+            ArithToUint256(GetBlockProof(*pindex)),
+            pindex->nHeight,
+            total_sapling_tx
+        );
+
+        view.PushHistoryNode(consensusBranchId, historyNode);
     }
 
     int64_t nTime1 = GetTimeMicros(); nTimeConnect += nTime1 - nTimeStart;
@@ -3115,7 +3251,11 @@ bool static ConnectTip(CValidationState& state, const CChainParams& chainparams,
     mempool.removeForBlock(pblock->vtx, pindexNew->nHeight, txConflicted, !IsInitialBlockDownload(chainparams));
 
     // Remove transactions that expire at new block height from mempool
-    mempool.removeExpired(pindexNew->nHeight);
+    auto ids = mempool.removeExpired(pindexNew->nHeight);
+
+    for (auto id : ids) {
+        uiInterface.NotifyTxExpiration(id);
+    }
 
     // Update chainActive & related variables.
     UpdateTip(pindexNew, chainparams);
@@ -3462,7 +3602,7 @@ bool ReconsiderBlock(CValidationState& state, CBlockIndex *pindex) {
     return true;
 }
 
-CBlockIndex* AddToBlockIndex(const CBlockHeader& block)
+CBlockIndex* AddToBlockIndex(const CBlockHeader& block, const Consensus::Params& consensusParams)
 {
     // Check for duplicate
     uint256 hash = block.GetHash();
@@ -3484,6 +3624,18 @@ CBlockIndex* AddToBlockIndex(const CBlockHeader& block)
     {
         pindexNew->pprev = (*miPrev).second;
         pindexNew->nHeight = pindexNew->pprev->nHeight + 1;
+
+        if (IsActivationHeight(pindexNew->nHeight, consensusParams, Consensus::UPGRADE_HEARTWOOD)) {
+            // hashFinalSaplingRoot is currently null, and will be set correctly in ConnectBlock.
+            // hashChainHistoryRoot is null.
+        } else if (consensusParams.NetworkUpgradeActive(pindexNew->nHeight, Consensus::UPGRADE_HEARTWOOD)) {
+            // hashFinalSaplingRoot is currently null, and will be set correctly in ConnectBlock.
+            pindexNew->hashChainHistoryRoot = pindexNew->hashLightClientRoot;
+        } else {
+            // hashChainHistoryRoot is null.
+            pindexNew->hashFinalSaplingRoot = pindexNew->hashLightClientRoot;
+        }
+
         pindexNew->BuildSkip();
     }
     pindexNew->nChainWork = (pindexNew->pprev ? pindexNew->pprev->nChainWork : 0) + GetBlockProof(*pindexNew);
@@ -3506,7 +3658,7 @@ void FallbackSproutValuePoolBalance(
     }
 
     // When developer option -developersetpoolsizezero is enabled, we don't need a fallback balance.
-    if (fExperimentalMode && mapArgs.count("-developersetpoolsizezero")) {
+    if (fExperimentalDeveloperSetPoolSizeZero) {
         return;
     }
 
@@ -3717,13 +3869,19 @@ bool CheckBlockHeader(
     const CChainParams& chainparams,
     bool fCheckPOW)
 {
+    auto consensusParams = chainparams.GetConsensus();
+
     // Check block version
     if (block.nVersion < MIN_BLOCK_VERSION)
         return state.DoS(100, error("CheckBlockHeader(): block version too low"),
                          REJECT_INVALID, "version-too-low");
 
-    // Check Equihash solution is valid
-    if (fCheckPOW && !CheckEquihashSolution(&block, chainparams.GetConsensus()))
+    // Check Equihash solution is valid. The main check is in ContextualCheckBlockHeader,
+    // because we currently need to know the block height. That function skips the genesis
+    // block because it has no previous block, so we check it specifically here.
+    if (fCheckPOW &&
+        block.GetHash() == consensusParams.hashGenesisBlock &&
+        !CheckEquihashSolution(&block, 0, consensusParams))
         return state.DoS(100, error("CheckBlockHeader(): Equihash solution invalid"),
                          REJECT_INVALID, "invalid-solution");
 
@@ -3800,7 +3958,8 @@ bool CheckBlock(const CBlock& block, CValidationState& state,
 
 bool ContextualCheckBlockHeader(
     const CBlockHeader& block, CValidationState& state,
-    const CChainParams& chainParams, CBlockIndex * const pindexPrev)
+    const CChainParams& chainParams, CBlockIndex * const pindexPrev,
+    bool fCheckPOW)
 {
     const Consensus::Params& consensusParams = chainParams.GetConsensus();
     uint256 hash = block.GetHash();
@@ -3811,6 +3970,11 @@ bool ContextualCheckBlockHeader(
     assert(pindexPrev);
 
     int nHeight = pindexPrev->nHeight+1;
+
+    // Check Equihash solution is valid
+    if (fCheckPOW && !CheckEquihashSolution(&block, nHeight, consensusParams))
+        return state.DoS(100, error("CheckBlockHeader(): Equihash solution invalid"),
+                         REJECT_INVALID, "invalid-solution");
 
     // Check proof of work
     if (block.nBits != GetNextWorkRequired(pindexPrev, &block, consensusParams)) {
@@ -3840,9 +4004,9 @@ bool ContextualCheckBlockHeader(
     }
 
     // Check timestamp
-    auto nTimeLimit = GetAdjustedTime() + MAX_FUTURE_BLOCK_TIME_ADJUSTED;
+    auto nTimeLimit = GetTime() + MAX_FUTURE_BLOCK_TIME_LOCAL;
     if (block.GetBlockTime() > nTimeLimit) {
-        return state.Invalid(error("%s: block at height %d, timestamp %d is too far ahead of adjusted time, limit is %d",
+        return state.Invalid(error("%s: block at height %d, timestamp %d is too far ahead of local time, limit is %d",
                                    __func__, nHeight, block.GetBlockTime(), nTimeLimit),
                              REJECT_INVALID, "time-too-new");
     }
@@ -3884,7 +4048,8 @@ bool ContextualCheckBlock(
                                 ? pindexPrev->GetMedianTimePast()
                                 : block.GetBlockTime();
         if (!IsFinalTx(tx, nHeight, nLockTimeCutoff)) {
-            return state.DoS(10, error("%s: contains a non-final transaction", __func__), REJECT_INVALID, "bad-txns-nonfinal");
+            return state.DoS(10, error("%s: contains a non-final transaction", __func__),
+                             REJECT_INVALID, "bad-txns-nonfinal");
         }
     }
 
@@ -3897,15 +4062,16 @@ bool ContextualCheckBlock(
         CScript expect = CScript() << nHeight;
         if (block.vtx[0].vin[0].scriptSig.size() < expect.size() ||
             !std::equal(expect.begin(), expect.end(), block.vtx[0].vin[0].scriptSig.begin())) {
-            return state.DoS(100, error("%s: block height mismatch in coinbase", __func__), REJECT_INVALID, "bad-cb-height");
+            return state.DoS(100, error("%s: block height mismatch in coinbase", __func__),
+                             REJECT_INVALID, "bad-cb-height");
         }
     }
 
     // Coinbase transaction must include an output sending 20% of
-    // the block reward to a founders reward script, until the last founders
-    // reward block is reached, with exception of the genesis block.
-    // The last founders reward block is defined as the block just before the
-    // first subsidy halving block, which occurs at halving_interval + slow_start_shift
+    // the block subsidy to a Founders' Reward script, until the last Founders'
+    // Reward block is reached, with exception of the genesis block.
+    // The last Founders' Reward block is defined as the block just before the
+    // first subsidy halving block, which occurs at halving_interval + slow_start_shift.
     if ((nHeight > 0) && (nHeight <= consensusParams.GetLastFoundersRewardBlockHeight(nHeight))) {
         bool found = false;
 
@@ -3919,7 +4085,8 @@ bool ContextualCheckBlock(
         }
 
         if (!found) {
-            return state.DoS(100, error("%s: founders reward missing", __func__), REJECT_INVALID, "cb-no-founders-reward");
+            return state.DoS(100, error("%s: founders reward missing", __func__),
+                             REJECT_INVALID, "cb-no-founders-reward");
         }
     }
 
@@ -3961,7 +4128,7 @@ static bool AcceptBlockHeader(const CBlockHeader& block, CValidationState& state
         return false;
 
     if (pindex == NULL)
-        pindex = AddToBlockIndex(block);
+        pindex = AddToBlockIndex(block, chainparams.GetConsensus());
 
     if (ppindex)
         *ppindex = pindex;
@@ -4098,7 +4265,7 @@ bool TestBlockValidity(CValidationState& state, const CChainParams& chainparams,
     auto verifier = libzcash::ProofVerifier::Disabled();
 
     // NOTE: CheckBlockHeader is called by CheckBlock
-    if (!ContextualCheckBlockHeader(block, state, chainparams, pindexPrev))
+    if (!ContextualCheckBlockHeader(block, state, chainparams, pindexPrev, fCheckPOW))
         return false;
     if (!CheckBlock(block, state, chainparams, verifier, fCheckPOW, fCheckMerkleRoot))
         return false;
@@ -4286,7 +4453,7 @@ CBlockIndex * InsertBlockIndex(uint256 hash)
 bool static LoadBlockIndexDB()
 {
     const CChainParams& chainparams = Params();
-    if (!pblocktree->LoadBlockIndexGuts(InsertBlockIndex))
+    if (!pblocktree->LoadBlockIndexGuts(InsertBlockIndex, chainparams))
         return false;
 
     boost::this_thread::interruption_point();
@@ -4338,7 +4505,7 @@ bool static LoadBlockIndexDB()
             // If developer option -developersetpoolsizezero has been enabled,
             // override and set the in-memory size of shielded pools to zero.  An unshielding transaction
             // can then be used to trigger and test the handling of turnstile violations.
-            if (fExperimentalMode && mapArgs.count("-developersetpoolsizezero")) {
+            if (fExperimentalDeveloperSetPoolSizeZero) {
                 pindex->nChainSproutValue = 0;
                 pindex->nChainSaplingValue = 0;
             }
@@ -4409,19 +4576,28 @@ bool static LoadBlockIndexDB()
     // Check whether we need to continue reindexing
     bool fReindexing = false;
     pblocktree->ReadReindexing(fReindexing);
-    fReindex |= fReindexing;
+    if(fReindexing) fReindex = true;
 
     // Check whether we have a transaction index
     pblocktree->ReadFlag("txindex", fTxIndex);
     LogPrintf("%s: transaction index %s\n", __func__, fTxIndex ? "enabled" : "disabled");
 
-    // insightexplorer
+    // insightexplorer and lightwalletd
     // Check whether block explorer features are enabled
+    bool fInsightExplorer = false;
+    bool fLightWalletd = false;
     pblocktree->ReadFlag("insightexplorer", fInsightExplorer);
+    pblocktree->ReadFlag("lightwalletd", fLightWalletd);
     LogPrintf("%s: insight explorer %s\n", __func__, fInsightExplorer ? "enabled" : "disabled");
-    fAddressIndex = fInsightExplorer;
-    fSpentIndex = fInsightExplorer;
-    fTimestampIndex = fInsightExplorer;
+    LogPrintf("%s: light wallet daemon %s\n", __func__, fLightWalletd ? "enabled" : "disabled");
+    if (fInsightExplorer) {
+        fAddressIndex = true;
+        fSpentIndex = true;
+        fTimestampIndex = true;
+    }
+    else if (fLightWalletd) {
+        fAddressIndex = true;
+    }
 
     // Fill in-memory data
     BOOST_FOREACH(const PAIRTYPE(uint256, CBlockIndex*)& item, mapBlockIndex)
@@ -4761,12 +4937,17 @@ bool InitBlockIndex(const CChainParams& chainparams)
     fTxIndex = GetBoolArg("-txindex", DEFAULT_TXINDEX);
     pblocktree->WriteFlag("txindex", fTxIndex);
 
-    // Use the provided setting for -insightexplorer in the new database
-    fInsightExplorer = GetBoolArg("-insightexplorer", false);
-    pblocktree->WriteFlag("insightexplorer", fInsightExplorer);
-    fAddressIndex = fInsightExplorer;
-    fSpentIndex = fInsightExplorer;
-    fTimestampIndex = fInsightExplorer;
+    // Use the provided setting for -insightexplorer or -lightwalletd in the new database
+    pblocktree->WriteFlag("insightexplorer", fExperimentalInsightExplorer);
+    pblocktree->WriteFlag("lightwalletd", fExperimentalLightWalletd);
+    if (fExperimentalInsightExplorer) {
+        fAddressIndex = true;
+        fSpentIndex = true;
+        fTimestampIndex = true;
+    }
+    else if (fExperimentalLightWalletd) {
+        fAddressIndex = true;
+    }
 
     LogPrintf("Initializing databases...\n");
 
@@ -4782,7 +4963,7 @@ bool InitBlockIndex(const CChainParams& chainparams)
                 return error("LoadBlockIndex(): FindBlockPos failed");
             if (!WriteBlockToDisk(block, blockPos, chainparams.MessageStart()))
                 return error("LoadBlockIndex(): writing genesis block to disk failed");
-            CBlockIndex *pindex = AddToBlockIndex(block);
+            CBlockIndex *pindex = AddToBlockIndex(block, chainparams.GetConsensus());
             if (!ReceivedBlockTransactions(block, state, chainparams, pindex, blockPos))
                 return error("LoadBlockIndex(): genesis block not accepted");
             if (!ActivateBestChain(state, chainparams, &block))
@@ -4808,8 +4989,12 @@ bool LoadExternalBlockFile(const CChainParams& chainparams, FILE* fileIn, CDiskB
         // This takes over fileIn and calls fclose() on it in the CBufferedFile destructor
         CBufferedFile blkdat(fileIn, 2*MAX_BLOCK_SIZE, MAX_BLOCK_SIZE+8, SER_DISK, CLIENT_VERSION);
         uint64_t nRewind = blkdat.GetPos();
+        size_t initialSize = nSizeReindexed;
         while (!blkdat.eof()) {
             boost::this_thread::interruption_point();
+
+            if (fReindex)
+               nSizeReindexed = initialSize + nRewind;
 
             blkdat.SetPos(nRewind);
             nRewind++; // start one byte further next time, in case of failure
@@ -4872,7 +5057,7 @@ bool LoadExternalBlockFile(const CChainParams& chainparams, FILE* fileIn, CDiskB
                     std::pair<std::multimap<uint256, CDiskBlockPos>::iterator, std::multimap<uint256, CDiskBlockPos>::iterator> range = mapBlocksUnknownParent.equal_range(head);
                     while (range.first != range.second) {
                         std::multimap<uint256, CDiskBlockPos>::iterator it = range.first;
-                        if (ReadBlockFromDisk(block, it->second, chainparams.GetConsensus()))
+                        if (ReadBlockFromDisk(block, it->second, mapBlockIndex[head]->nHeight, chainparams.GetConsensus()))
                         {
                             LogPrintf("%s: Processing out of order child %s of %s\n", __func__, block.GetHash().ToString(),
                                     head.ToString());
@@ -5082,71 +5267,6 @@ void static CheckBlockIndex(const Consensus::Params& consensusParams)
     // Check that we actually traversed the entire map.
     assert(nNodes == forward.size());
 }
-
-//////////////////////////////////////////////////////////////////////////////
-//
-// CAlert
-//
-
-std::string GetWarnings(const std::string& strFor)
-{
-    int nPriority = 0;
-    string strStatusBar;
-    string strRPC;
-
-    if (!CLIENT_VERSION_IS_RELEASE)
-        strStatusBar = _("This is a pre-release test build - use at your own risk - do not use for mining or merchant applications");
-
-    if (GetBoolArg("-testsafemode", DEFAULT_TESTSAFEMODE))
-        strStatusBar = strRPC = "testsafemode enabled";
-
-    // Misc warnings like out of disk space and clock is wrong
-    if (strMiscWarning != "")
-    {
-        nPriority = 1000;
-        strStatusBar = strMiscWarning;
-    }
-
-    if (fLargeWorkForkFound)
-    {
-        nPriority = 2000;
-        strStatusBar = strRPC = _("Warning: The network does not appear to fully agree! Some miners appear to be experiencing issues.");
-    }
-    else if (fLargeWorkInvalidChainFound)
-    {
-        nPriority = 2000;
-        strStatusBar = strRPC = _("Warning: We do not appear to fully agree with our peers! You may need to upgrade, or other nodes may need to upgrade.");
-    }
-
-    // Alerts
-    {
-        LOCK(cs_mapAlerts);
-        BOOST_FOREACH(PAIRTYPE(const uint256, CAlert)& item, mapAlerts)
-        {
-            const CAlert& alert = item.second;
-            if (alert.AppliesToMe() && alert.nPriority > nPriority)
-            {
-                nPriority = alert.nPriority;
-                strStatusBar = alert.strStatusBar;
-                if (alert.nPriority >= ALERT_PRIORITY_SAFE_MODE) {
-                    strRPC = alert.strRPCError;
-                }
-            }
-        }
-    }
-
-    if (strFor == "statusbar")
-        return strStatusBar;
-    else if (strFor == "rpc")
-        return strRPC;
-    assert(!"GetWarnings(): invalid parameter");
-    return "error";
-}
-
-
-
-
-
 
 
 
@@ -5371,8 +5491,12 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
         // Reject incoming connections from nodes that don't know about the current epoch
         const Consensus::Params& consensusParams = chainparams.GetConsensus();
         auto currentEpoch = CurrentEpoch(GetHeight(), consensusParams);
-        if (pfrom->nVersion < consensusParams.vUpgrades[currentEpoch].nProtocolVersion)
-        {
+        if (pfrom->nVersion < consensusParams.vUpgrades[currentEpoch].nProtocolVersion &&
+            !(
+                chainparams.NetworkIDString() == "regtest" &&
+                !GetBoolArg("-nurejectoldversions", DEFAULT_NU_REJECT_OLD_VERSIONS)
+            )
+        ) {
             LogPrintf("peer=%d using obsolete version %i; disconnecting\n", pfrom->id, pfrom->nVersion);
             pfrom->PushMessage("reject", strCommand, REJECT_OBSOLETE,
                             strprintf("Version must be %d or greater",
@@ -5474,9 +5598,7 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
                   pfrom->nStartingHeight, addrMe.ToString(), pfrom->id,
                   remoteAddr);
 
-        int64_t nTimeOffset = nTime - GetTime();
-        pfrom->nTimeOffset = nTimeOffset;
-        AddTimeData(pfrom->addr, nTimeOffset);
+        pfrom->nTimeOffset = timeWarning.AddTimeData(pfrom->addr, nTime, GetTime());
     }
 
 
@@ -5504,8 +5626,12 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
     // 1. The version message has been received
     // 2. Peer version is below the minimum version for the current epoch
     else if (pfrom->nVersion < chainparams.GetConsensus().vUpgrades[
-        CurrentEpoch(GetHeight(), chainparams.GetConsensus())].nProtocolVersion)
-    {
+        CurrentEpoch(GetHeight(), chainparams.GetConsensus())].nProtocolVersion &&
+        !(
+            chainparams.NetworkIDString() == "regtest" &&
+            !GetBoolArg("-nurejectoldversions", DEFAULT_NU_REJECT_OLD_VERSIONS)
+        )
+    ) {
         LogPrintf("peer=%d using obsolete version %i; disconnecting\n", pfrom->id, pfrom->nVersion);
         pfrom->PushMessage("reject", strCommand, REJECT_OBSOLETE,
                             strprintf("Version must be %d or greater",
@@ -5532,7 +5658,7 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
 
         // Store the new addresses
         vector<CAddress> vAddrOk;
-        int64_t nNow = GetAdjustedTime();
+        int64_t nNow = GetTime();
         int64_t nSince = nNow - 10 * 60;
         BOOST_FOREACH(CAddress& addr, vAddr)
         {
@@ -5625,7 +5751,7 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
                     pfrom->PushMessage("getheaders", chainActive.GetLocator(pindexBestHeader), inv.hash);
                     CNodeState *nodestate = State(pfrom->GetId());
 
-                    if (chainActive.Tip()->GetBlockTime() > GetAdjustedTime() - chainparams.GetConsensus().PoWTargetSpacing(pindexBestHeader->nHeight) * 20 &&
+                    if (chainActive.Tip()->GetBlockTime() > GetTime() - chainparams.GetConsensus().PoWTargetSpacing(pindexBestHeader->nHeight) * 20 &&
                         nodestate->nBlocksInFlight < MAX_BLOCKS_IN_TRANSIT_PER_PEER) {
                         vToFetch.push_back(inv);
                         // Mark block as in flight already, even though the actual "getdata" message only goes out
@@ -6477,7 +6603,7 @@ bool SendMessages(CNode* pto, bool fSendTrickle)
         bool fFetch = state.fPreferredDownload || (nPreferredDownload == 0 && !pto->fClient && !pto->fOneShot); // Download if this is a nice peer, or we have no nice peers and this one might do.
         if (!state.fSyncStarted && !pto->fClient && !fImporting && !fReindex) {
             // Only actively request headers from a single peer, unless we're close to today.
-            if ((nSyncStarted == 0 && fFetch) || pindexBestHeader->GetBlockTime() > GetAdjustedTime() - 24 * 60 * 60) {
+            if ((nSyncStarted == 0 && fFetch) || pindexBestHeader->GetBlockTime() > GetTime() - 24 * 60 * 60) {
                 state.fSyncStarted = true;
                 nSyncStarted++;
                 CBlockIndex *pindexStart = pindexBestHeader->pprev ? pindexBestHeader->pprev : pindexBestHeader;

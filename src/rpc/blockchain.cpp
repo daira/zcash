@@ -8,6 +8,7 @@
 #include "chainparams.h"
 #include "checkpoints.h"
 #include "consensus/validation.h"
+#include "experimental_features.h"
 #include "key_io.h"
 #include "main.h"
 #include "primitives/transaction.h"
@@ -228,7 +229,8 @@ UniValue blockToJSON(const CBlock& block, const CBlockIndex* blockindex, bool tx
     result.push_back(Pair("height", blockindex->nHeight));
     result.push_back(Pair("version", block.nVersion));
     result.push_back(Pair("merkleroot", block.hashMerkleRoot.GetHex()));
-    result.push_back(Pair("finalsaplingroot", block.hashFinalSaplingRoot.GetHex()));
+    result.push_back(Pair("finalsaplingroot", blockindex->hashFinalSaplingRoot.GetHex()));
+    result.push_back(Pair("chainhistoryroot", blockindex->hashChainHistoryRoot.GetHex()));
     UniValue txs(UniValue::VARR);
     BOOST_FOREACH(const CTransaction&tx, block.vtx)
     {
@@ -406,11 +408,9 @@ UniValue getrawmempool(const UniValue& params, bool fHelp)
 // insightexplorer
 UniValue getblockdeltas(const UniValue& params, bool fHelp)
 {
-    std::string enableArg = "insightexplorer";
-    bool enabled = fExperimentalMode && fInsightExplorer;
     std::string disabledMsg = "";
-    if (!enabled) {
-        disabledMsg = experimentalDisabledHelpMsg("getblockdeltas", enableArg);
+    if (!(fExperimentalInsightExplorer || fExperimentalLightWalletd)) {
+        disabledMsg = experimentalDisabledHelpMsg("getblockdeltas", {"insightexplorer", "lightwalletd"});
     }
     if (fHelp || params.size() != 1)
         throw runtime_error(
@@ -463,7 +463,7 @@ UniValue getblockdeltas(const UniValue& params, bool fHelp)
             + HelpExampleRpc("getblockdeltas", "\"00227e566682aebd6a7a5b772c96d7a999cadaebeaf1ce96f4191a3aad58b00b\"")
         );
 
-    if (!enabled) {
+    if (!(fExperimentalInsightExplorer || fExperimentalLightWalletd)) {
         throw JSONRPCError(RPC_MISC_ERROR, "Error: getblockdeltas is disabled. "
             "Run './zcash-cli help getblockdeltas' for instructions on how to enable this feature.");
     }
@@ -491,11 +491,9 @@ UniValue getblockdeltas(const UniValue& params, bool fHelp)
 // insightexplorer
 UniValue getblockhashes(const UniValue& params, bool fHelp)
 {
-    std::string enableArg = "insightexplorer";
-    bool fEnableGetBlockHashes = fExperimentalMode && fInsightExplorer;
     std::string disabledMsg = "";
-    if (!fEnableGetBlockHashes) {
-        disabledMsg = experimentalDisabledHelpMsg("getblockhashes", enableArg);
+    if (!(fExperimentalInsightExplorer || fExperimentalLightWalletd)) {
+        disabledMsg = experimentalDisabledHelpMsg("getblockhashes", {"insightexplorer", "lightwalletd"});
     }
     if (fHelp || params.size() < 2)
         throw runtime_error(
@@ -528,7 +526,7 @@ UniValue getblockhashes(const UniValue& params, bool fHelp)
             + HelpExampleCli("getblockhashes", "1558141697 1558141576 '{\"noOrphans\":false, \"logicalTimes\":true}'")
             );
 
-    if (!fEnableGetBlockHashes) {
+    if (!(fExperimentalInsightExplorer || fExperimentalLightWalletd)) {
         throw JSONRPCError(RPC_MISC_ERROR, "Error: getblockhashes is disabled. "
             "Run './zcash-cli help getblockhashes' for instructions on how to enable this feature.");
     }
@@ -578,7 +576,7 @@ UniValue getblockhash(const UniValue& params, bool fHelp)
             "getblockhash index\n"
             "\nReturns hash of block in best-block-chain at index provided.\n"
             "\nArguments:\n"
-            "1. index         (numeric, required) The block index\n"
+            "1. index         (numeric, required) The block index. If negative then -1 is the last known valid block\n"
             "\nResult:\n"
             "\"hash\"         (string) The block hash\n"
             "\nExamples:\n"
@@ -589,6 +587,11 @@ UniValue getblockhash(const UniValue& params, bool fHelp)
     LOCK(cs_main);
 
     int nHeight = params[0].get_int();
+
+    if (nHeight < 0) {
+        nHeight += chainActive.Height() + 1;
+    }
+
     if (nHeight < 0 || nHeight > chainActive.Height())
         throw JSONRPCError(RPC_INVALID_PARAMETER, "Block height out of range");
 
@@ -662,7 +665,7 @@ UniValue getblock(const UniValue& params, bool fHelp)
             "If verbosity is 1, returns an Object with information about the block.\n"
             "If verbosity is 2, returns an Object with information about the block and information about each transaction. \n"
             "\nArguments:\n"
-            "1. \"hash|height\"          (string, required) The block hash or height\n"
+            "1. \"hash|height\"          (string, required) The block hash or height. Height can be negative where -1 is the last known valid block\n"
             "2. verbosity              (numeric, optional, default=1) 0 for hex encoded data, 1 for a json object, and 2 for json object with transaction data\n"
             "\nResult (for verbosity = 0):\n"
             "\"data\"             (string) A string that is serialized, hex-encoded data for the block.\n"
@@ -708,7 +711,7 @@ UniValue getblock(const UniValue& params, bool fHelp)
     // If height is supplied, find the hash
     if (strHash.size() < (2 * sizeof(uint256))) {
         // std::stoi allows characters, whereas we want to be strict
-        regex r("[[:digit:]]+");
+        regex r("(?:(-?)[1-9][0-9]*|[0-9]+)");
         if (!regex_match(strHash, r)) {
             throw JSONRPCError(RPC_INVALID_PARAMETER, "Invalid block height parameter");
         }
@@ -721,9 +724,14 @@ UniValue getblock(const UniValue& params, bool fHelp)
             throw JSONRPCError(RPC_INVALID_PARAMETER, "Invalid block height parameter");
         }
 
+        if (nHeight < 0) {
+            nHeight += chainActive.Height() + 1;
+        }
+
         if (nHeight < 0 || nHeight > chainActive.Height()) {
             throw JSONRPCError(RPC_INVALID_PARAMETER, "Block height out of range");
         }
+
         strHash = chainActive[nHeight]->GetBlockHash().GetHex();
     }
 

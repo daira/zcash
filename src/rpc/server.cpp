@@ -49,22 +49,22 @@ static struct CRPCSignals
     boost::signals2::signal<void (const CRPCCommand&)> PostCommand;
 } g_rpcSignals;
 
-void RPCServer::OnStarted(boost::function<void ()> slot)
+void RPCServer::OnStarted(std::function<void ()> slot)
 {
     g_rpcSignals.Started.connect(slot);
 }
 
-void RPCServer::OnStopped(boost::function<void ()> slot)
+void RPCServer::OnStopped(std::function<void ()> slot)
 {
     g_rpcSignals.Stopped.connect(slot);
 }
 
-void RPCServer::OnPreCommand(boost::function<void (const CRPCCommand&)> slot)
+void RPCServer::OnPreCommand(std::function<void (const CRPCCommand&)> slot)
 {
     g_rpcSignals.PreCommand.connect(boost::bind(slot, _1));
 }
 
-void RPCServer::OnPostCommand(boost::function<void (const CRPCCommand&)> slot)
+void RPCServer::OnPostCommand(std::function<void (const CRPCCommand&)> slot)
 {
     g_rpcSignals.PostCommand.connect(boost::bind(slot, _1));
 }
@@ -467,14 +467,32 @@ std::string HelpExampleRpc(const std::string& methodname, const std::string& arg
         "\"method\": \"" + methodname + "\", \"params\": [" + args + "] }' -H 'content-type: text/plain;' http://127.0.0.1:8232/\n";
 }
 
-string experimentalDisabledHelpMsg(const string& rpc, const string& enableArg)
+std::string experimentalDisabledHelpMsg(const std::string& rpc, const std::vector<string>& enableArgs)
 {
-    return "\nWARNING: " + rpc + " is disabled.\n"
-        "To enable it, restart zcashd with the -experimentalfeatures and\n"
-        "-" + enableArg + " commandline options, or add these two lines\n"
-        "to the zcash.conf file:\n\n"
-        "experimentalfeatures=1\n"
-        + enableArg + "=1\n";
+    std::string cmd, config = "";
+    const auto size = enableArgs.size();
+    assert(size > 0);
+
+    for (size_t i = 0; i < size; ++i)
+    {
+        if (size == 1 || i == 0)
+        {
+            cmd += "-experimentalfeatures and -" + enableArgs.at(i);
+            config += "experimentalfeatures=1\n";
+            config += enableArgs.at(i) + "=1\n";
+        }
+        else {
+            cmd += " or:\n-experimentalfeatures and -" + enableArgs.at(i);
+            config += "\nor:\n\n";
+            config += "experimentalfeatures=1\n";
+            config += enableArgs.at(i) + "=1\n";
+        }
+    }
+    return "\nWARNING: " + rpc + " is disabled.\n" +
+        "To enable it, restart zcashd with the following command line options:\n"
+        + cmd + "\n\n" +
+        "Alternatively add these two lines to the zcash.conf file:\n\n"
+        + config;
 }
 
 void RPCRegisterTimerInterface(RPCTimerInterface *iface)
@@ -489,7 +507,7 @@ void RPCUnregisterTimerInterface(RPCTimerInterface *iface)
     timerInterfaces.erase(i);
 }
 
-void RPCRunLater(const std::string& name, boost::function<void(void)> func, int64_t nSeconds)
+void RPCRunLater(const std::string& name, std::function<void(void)> func, int64_t nSeconds)
 {
     if (timerInterfaces.empty())
         throw JSONRPCError(RPC_INTERNAL_ERROR, "No timer handler registered for RPC");

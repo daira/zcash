@@ -171,7 +171,7 @@ CAddress GetLocalAddress(const CNetAddr *paddrPeer)
         ret = CAddress(addr);
     }
     ret.nServices = nLocalServices;
-    ret.nTime = GetAdjustedTime();
+    ret.nTime = GetTime();
     return ret;
 }
 
@@ -372,7 +372,7 @@ CNode* ConnectNode(CAddress addrConnect, const char *pszDest)
     /// debug print
     LogPrint("net", "trying connection %s lastseen=%.1fhrs\n",
         pszDest ? pszDest : addrConnect.ToString(),
-        pszDest ? 0.0 : (double)(GetAdjustedTime() - addrConnect.nTime)/3600.0);
+        pszDest ? 0.0 : (double)(GetTime() - addrConnect.nTime)/3600.0);
 
     // Connect
     SOCKET hSocket;
@@ -428,7 +428,7 @@ void CNode::PushVersion()
 {
     int nBestHeight = g_signals.GetHeight().get_value_or(0);
 
-    int64_t nTime = (fInbound ? GetAdjustedTime() : GetTime());
+    int64_t nTime = GetTime();
     CAddress addrYou = (addr.IsRoutable() && !IsProxy(addr) ? addr : CAddress(CService("0.0.0.0",0)));
     CAddress addrMe = GetLocalAddress(&addr);
     GetRandBytes((unsigned char*)&nLocalHostNonce, sizeof(nLocalHostNonce));
@@ -832,7 +832,12 @@ static bool AttemptToEvictConnection(bool fPreferNewConnection) {
         {
             // Find any nodes which don't support the protocol version for the next upgrade
             for (const CNodeRef &node : vEvictionCandidates) {
-                if (node->nVersion < params.vUpgrades[idx].nProtocolVersion) {
+                if (node->nVersion < params.vUpgrades[idx].nProtocolVersion &&
+                    !(
+                        Params().NetworkIDString() == "regtest" &&
+                        !GetBoolArg("-nurejectoldversions", DEFAULT_NU_REJECT_OLD_VERSIONS)
+                    )
+                ) {
                     vTmpEvictionCandidates.push_back(node);
                 }
             }
@@ -1384,7 +1389,7 @@ void ThreadOpenConnections()
             }
         }
 
-        int64_t nANow = GetAdjustedTime();
+        int64_t nANow = GetTime();
 
         int nTries = 0;
         while (true)

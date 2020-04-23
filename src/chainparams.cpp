@@ -171,6 +171,7 @@ public:
         bech32HRPs[SAPLING_FULL_VIEWING_KEY]     = "zviews";
         bech32HRPs[SAPLING_INCOMING_VIEWING_KEY] = "zivks";
         bech32HRPs[SAPLING_EXTENDED_SPEND_KEY]   = "secret-extended-key-main";
+        bech32HRPs[SAPLING_EXTENDED_FVK]         = "zxviews";
 
         vFixedSeeds = std::vector<SeedSpec6>(pnSeed6_main, pnSeed6_main + ARRAYLEN(pnSeed6_main));
 
@@ -320,15 +321,14 @@ public:
         consensus.vUpgrades[Consensus::UPGRADE_BLOSSOM].hashActivationBlock =
             uint256S("00367515ef2e781b8c9358b443b6329572599edd02c59e8af67db9785122f298");
         consensus.vUpgrades[Consensus::UPGRADE_HEARTWOOD].nProtocolVersion = 170010;
-        consensus.vUpgrades[Consensus::UPGRADE_HEARTWOOD].nActivationHeight =
-            Consensus::NetworkUpgrade::NO_ACTIVATION_HEIGHT;
+        consensus.vUpgrades[Consensus::UPGRADE_HEARTWOOD].nActivationHeight = 903800;
 
         // On testnet we activate this rule 6 blocks after Blossom activation. From block 299188 and
         // prior to Blossom activation, the testnet minimum-difficulty threshold was 15 minutes (i.e.
         // a minimum difficulty block can be mined if no block is mined normally within 15 minutes):
         // <https://zips.z.cash/zip-0205#change-to-difficulty-adjustment-on-testnet>
         // However the median-time-past is 6 blocks behind, and the worst-case time for 7 blocks at a
-        // 15-minute spacing is ~105 minutes, which is exceeds the limit imposed by the soft fork of
+        // 15-minute spacing is ~105 minutes, which exceeds the limit imposed by the soft fork of
         // 90 minutes.
         //
         // After Blossom, the minimum difficulty threshold time is changed to 6 times the block target
@@ -384,6 +384,7 @@ public:
         bech32HRPs[SAPLING_FULL_VIEWING_KEY]     = "zviewtestsapling";
         bech32HRPs[SAPLING_INCOMING_VIEWING_KEY] = "zivktestsapling";
         bech32HRPs[SAPLING_EXTENDED_SPEND_KEY]   = "secret-extended-key-test";
+        bech32HRPs[SAPLING_EXTENDED_FVK]         = "zxviewtestsapling";
 
         vFixedSeeds = std::vector<SeedSpec6>(pnSeed6_test, pnSeed6_test + ARRAYLEN(pnSeed6_test));
 
@@ -529,6 +530,7 @@ public:
         bech32HRPs[SAPLING_FULL_VIEWING_KEY]     = "zviewregtestsapling";
         bech32HRPs[SAPLING_INCOMING_VIEWING_KEY] = "zivkregtestsapling";
         bech32HRPs[SAPLING_EXTENDED_SPEND_KEY]   = "secret-extended-key-regtest";
+        bech32HRPs[SAPLING_EXTENDED_FVK]         = "zxviewregtestsapling";
 
         // Founders reward script expects a vector of 2-of-3 multisig addresses
         vFoundersRewardAddress = { "t2FwcEhFdNXuFMv1tcYwaBJtYVtMj8b1uTg" };
@@ -616,7 +618,7 @@ CScript CChainParams::GetFoundersRewardScriptAtHeight(int nHeight) const {
 
     CTxDestination address = DecodeDestination(GetFoundersRewardAddressAtHeight(nHeight).c_str());
     assert(IsValidDestination(address));
-    assert(boost::get<CScriptID>(&address) != nullptr);
+    assert(IsScriptDestination(address));
     CScriptID scriptID = boost::get<CScriptID>(address); // address is a boost variant
     CScript script = CScript() << OP_HASH160 << ToByteVector(scriptID) << OP_EQUAL;
     return script;

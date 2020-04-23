@@ -1,9 +1,7 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 # Copyright (c) 2016 The Zcash developers
 # Distributed under the MIT software license, see the accompanying
 # file COPYING or https://www.opensource.org/licenses/mit-license.php .
-
-import sys; assert sys.version_info < (3,), ur"This script does not run under Python 3. Please use Python 2.7.x."
 
 from test_framework.test_framework import BitcoinTestFramework
 from test_framework.util import assert_equal, assert_true, bitcoind_processes, \
@@ -124,10 +122,14 @@ class WalletNullifiersTest (BitcoinTestFramework):
             'total': node3mined + zsendmany2notevalue,
         })
 
-        # add node 1 address and node 2 viewing key to node 3
+        # Add node 1 address and node 2 viewing key to node 3
         myzvkey = self.nodes[2].z_exportviewingkey(myzaddr)
         self.nodes[3].importaddress(mytaddr1)
-        self.nodes[3].z_importviewingkey(myzvkey, 'whenkeyisnew', 1)
+        importvk_result = self.nodes[3].z_importviewingkey(myzvkey, 'whenkeyisnew', 1)
+
+        # Check results of z_importviewingkey
+        assert_equal(importvk_result["type"], "sprout")
+        assert_equal(importvk_result["address"], myzaddr)
 
         # Check the address has been imported
         assert_equal(myzaddr in self.nodes[3].z_listaddresses(), False)

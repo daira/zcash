@@ -5,8 +5,8 @@ CURDIR=$(cd $(dirname "$0"); pwd)
 # Get BUILDDIR and REAL_BITCOIND
 . "${CURDIR}/tests-config.sh"
 
-export BITCOINCLI=${BUILDDIR}/qa/pull-tester/run-bitcoin-cli
 export BITCOIND=${REAL_BITCOIND}
+export BITCOINCLI=${REAL_BITCOINCLI}
 
 #Run the tests
 
@@ -81,6 +81,9 @@ testScripts=(
     'shorter_block_times.py'
     'sprout_sapling_migration.py'
     'turnstile.py'
+    'mining_shielded_coinbase.py'
+    'framework.py'
+    'feature_zip221.py'
 );
 testScriptsExt=(
     'getblocktemplate_longpoll.py'
