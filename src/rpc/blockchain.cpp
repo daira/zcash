@@ -4,7 +4,6 @@
 // file COPYING or https://www.opensource.org/licenses/mit-license.php .
 
 #include "amount.h"
-#include "metrics.h"
 #include "chain.h"
 #include "chainparams.h"
 #include "checkpoints.h"
