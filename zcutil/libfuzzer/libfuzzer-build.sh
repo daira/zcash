@@ -32,6 +32,7 @@ die() {
 # parse command line options
 
 POSITIONAL=()
+JOBS=$(nproc)
 while [[ $# -gt 0 ]]
 do
 key="$1"
@@ -58,6 +59,11 @@ case $key in
   ;;
   -l|--logfile)
   LOGFILE="$2"
+  shift
+  shift
+  ;;
+  -j)
+  JOBS="$2"
   shift
   shift
   ;;
@@ -146,6 +152,6 @@ export BUILD_STAGE
 
 CONFIGURE_FLAGS="--enable-tests=no --disable-bench" \
   "$ZCUTIL/build.sh" \
-  -j$(nproc) \
+  "-j$JOBS" \
   "CC=$ZCUTIL/libfuzzer/zcash-wrapper-clang" \
   "CXX=$ZCUTIL/libfuzzer/zcash-wrapper-clang++" "${POSITIONAL[@]:1}" || die "Build failed at stage $BUILD_STAGE."
