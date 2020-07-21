@@ -8,7 +8,16 @@
   #include <stdalign.h>
 #endif
 
+#define NODE_SERIALIZED_LENGTH  171
 #define ENTRY_SERIALIZED_LENGTH 180
+
+typedef struct HistoryNode {
+    unsigned char bytes[NODE_SERIALIZED_LENGTH];
+}  HistoryNode;
+static_assert(
+    sizeof(HistoryNode) == NODE_SERIALIZED_LENGTH,
+    "HistoryNode struct is not the same size as the underlying byte array");
+static_assert(alignof(HistoryNode) == 1, "HistoryNode struct alignment is not 1");
 
 typedef struct HistoryEntry {
     unsigned char bytes[ENTRY_SERIALIZED_LENGTH];
@@ -331,9 +340,9 @@ extern "C" {
         const uint32_t *ni_ptr,
         const HistoryEntry *n_ptr,
         size_t p_len,
-        const unsigned char *nn_ptr,
+        const HistoryNode *nn_ptr,
         unsigned char *rt_ret,
-        unsigned char *buf_ret
+        HistoryNode *buf_ret
     );
 
     uint32_t librustzcash_mmr_delete(

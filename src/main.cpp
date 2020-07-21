@@ -2873,6 +2873,8 @@ bool ConnectBlock(const CBlock& block, CValidationState& state, CBlockIndex* pin
     }
     blockundo.old_sprout_tree_root = old_sprout_tree_root;
 
+    LogPrintf("*** height %d block hash %s: hashLightClientRoot=0x%s\n", pindex->nHeight,
+              block.GetHash().ToString(), block.hashLightClientRoot.GetHex());
     if (IsActivationHeight(pindex->nHeight, chainparams.GetConsensus(), Consensus::UPGRADE_HEARTWOOD)) {
         // In the block that activates ZIP 221, block.hashLightClientRoot MUST
         // be set to all zero bytes.
@@ -2890,7 +2892,10 @@ bool ConnectBlock(const CBlock& block, CValidationState& state, CBlockIndex* pin
         // - If the previous block is in this epoch, this block would affect
         //   this epoch's tree root, but as we haven't updated the tree for this
         //   block yet, view.GetHistoryRoot() returns the root we need.
-        if (block.hashLightClientRoot != view.GetHistoryRoot(prevConsensusBranchId)) {
+        auto expectedRoot = view.GetHistoryRoot(prevConsensusBranchId);
+        LogPrintf("*** height %d expectedRoot=0x%s\n", pindex->nHeight, expectedRoot.GetHex());
+
+        if (block.hashLightClientRoot != expectedRoot) {
             return state.DoS(100,
                 error("ConnectBlock(): block's hashLightClientRoot is incorrect (should be history tree root)"),
                 REJECT_INVALID, "bad-heartwood-root-in-block");

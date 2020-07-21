@@ -15,8 +15,6 @@ namespace libzcash {
 
 const int NODE_SERIALIZED_LENGTH = 171;
 
-typedef std::array<unsigned char, NODE_SERIALIZED_LENGTH> HistoryNode;
-
 typedef uint64_t HistoryIndex;
 
 class HistoryCache {
@@ -66,6 +64,5 @@ HistoryEntry LeafToEntry(const HistoryNode node);
 
 typedef libzcash::HistoryCache HistoryCache;
 typedef libzcash::HistoryIndex HistoryIndex;
-typedef libzcash::HistoryNode HistoryNode;
 
 #endif /* ZC_HISTORY_H_ */

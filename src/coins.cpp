@@ -463,6 +463,7 @@ HistoryCache& CCoinsViewCache::SelectHistoryCache(uint32_t epochId) const {
 void CCoinsViewCache::PushHistoryNode(uint32_t epochId, const HistoryNode node) {
     HistoryCache& historyCache = SelectHistoryCache(epochId);
 
+    LogPrintf("*** PushHistoryNode: epochId=%x, historyCache.length=%d\n", epochId, historyCache.length);
     if (historyCache.length == 0) {
         // special case, it just goes into the cache right away
         historyCache.Extend(node);
@@ -470,6 +471,7 @@ void CCoinsViewCache::PushHistoryNode(uint32_t epochId, const HistoryNode node) 
         if (librustzcash_mmr_hash_node(epochId, node.data(), historyCache.root.begin()) != 0) {
             throw std::runtime_error("hashing node failed");
         };
+        LogPrintf("*** PushHistoryNode: historyCache.root=%s\n", historyCache.root.GetHex());
 
         return;
     }
@@ -483,20 +485,21 @@ void CCoinsViewCache::PushHistoryNode(uint32_t epochId, const HistoryNode node) 
     std::array<HistoryNode, 32> appendBuf;
 
     uint32_t appends = librustzcash_mmr_append(
-        epochId, 
+        epochId,
         historyCache.length,
         entry_indices.data(),
         entries.data(),
         entry_indices.size(),
         node.data(),
         newRoot.begin(),
-        appendBuf.data()->data()
+        appendBuf.data()
     );
 
     for (size_t i = 0; i < appends; i++) {
         historyCache.Extend(appendBuf[i]);
     }
 
+    LogPrintf("*** PushHistoryNode: newRoot=%s\n", newRoot.GetHex());
     historyCache.root = newRoot;
 }
 
@@ -515,7 +518,7 @@ void CCoinsViewCache::PopHistoryNode(uint32_t epochId) {
             // `SelectHistoryCache` selects the tree for the new consensus
             // branch ID, not the one that existed on the chain being rolled
             // back.
-            
+
             // Sensible action is to truncate the history cache:
         case 1:
             // Just resetting tree to empty
