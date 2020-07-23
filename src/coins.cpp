@@ -11,6 +11,8 @@
 
 #include <assert.h>
 
+#include <utilstrencodings.h>
+
 /**
  * calculate number of bytes for the bitmask, and its number of non-zero bytes
  * each bit in the bitmask represents the availability of one output, but the
@@ -463,6 +465,11 @@ HistoryCache& CCoinsViewCache::SelectHistoryCache(uint32_t epochId) const {
 void CCoinsViewCache::PushHistoryNode(uint32_t epochId, const HistoryNode node) {
     HistoryCache& historyCache = SelectHistoryCache(epochId);
 
+    for (int i = 0; i < historyCache.length; i++) {
+        HistoryNode mmrNode = GetHistoryAt(epochId, i);
+        LogPrintf("Push %d: %s\n", i, HexStr(mmrNode.begin(), mmrNode.end()));
+    }
+
     if (historyCache.length == 0) {
         // special case, it just goes into the cache right away
         historyCache.Extend(node);
@@ -503,6 +510,11 @@ void CCoinsViewCache::PushHistoryNode(uint32_t epochId, const HistoryNode node) 
 void CCoinsViewCache::PopHistoryNode(uint32_t epochId) {
     HistoryCache& historyCache = SelectHistoryCache(epochId);
     uint256 newRoot;
+
+    for (int i = 0; i < historyCache.length; i++) {
+        HistoryNode mmrNode = GetHistoryAt(epochId, i);
+        LogPrintf("Push %d: %s\n", i, HexStr(mmrNode.begin(), mmrNode.end()));
+    }
 
     switch (historyCache.length) {
         case 0:
