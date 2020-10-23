@@ -1,0 +1,81 @@
+os: osx
+addons:
+  homebrew:
+    packages:
+      - git
+      - pkg-config
+      - automake
+      - autoconf
+      - libtool
+      - coreutils
+      - ipfs
+install:
+  - echo $TRAVIS_BUILD_DIR
+  - brew list
+  - brew install ipfs
+  - brew list
+  - ipfs init
+  - ipfs daemon &
+  - sleep 5
+  - travis_wait 60 ipfs get QmUSFo5zgPPXXejidzFWZcxVyF3AJH6Pr9br6Xisdww1r1 --output "$HOME/Library/Application Support/ZcashParams"
+  - ls -Alth "$HOME/Library/Application Support/ZcashParams"
+  - curl -O https://bootstrap.pypa.io/get-pip.py
+  - sudo python3 get-pip.py
+  - sudo pip3 install pyblake2 pyzmq simplejson
+  - make -C ./depends
+  - ./zcutil/build.sh -j2
+
+cache:
+  directories:
+    - "$HOME/Library/Application Support/ZcashParams"
+    - $TRAVIS_BUILD_DIR
+
+jobs:
+  include:
+    - stage: test
+      name: "rpc"
+      script:
+        - echo $TRAVIS_BUILD_DIR
+        - python3 --version
+        - pip3 list | grep simplejson
+        - ./qa/zcash/full_test_suite.py $TEST_TARGET
+      env:
+        - TEST_TARGET=rpc
+    - name: "btest"
+      script:
+        - ./qa/zcash/full_test_suite.py $TEST_TARGET
+      env:
+        - TEST_TARGET=btest
+    - name: "gtest"
+      env:
+        - TEST_TARGET=gtest
+    - name: "sec-hard"
+      script:
+        - ./qa/zcash/full_test_suite.py $TEST_TARGET
+      env:
+        -TEST_TARGET=sec-hard
+    - name: "no-dot-so"
+      script:
+        -./qa/zcash/full_test_suite.py $TEST_TARGET
+      env:
+        - TEST_TARGET=no-dot-so
+    - name: "util-test"
+      script:
+        -./qa/zcash/full_test_suite.py $TEST_TARGET
+      env:
+        - TEST_TARGET=no-dot-so
+    - name: "secp256k1"
+      script:
+        -./qa/zcash/full_test_suite.py $TEST_TARGET
+      env:
+        - TEST_TARGET=secp256k1
+    - name: "univalue"
+      script:
+        -./qa/zcash/full_test_suite.py $TEST_TARGET
+      env:
+        - TEST_TARGET=univalue
+    - name: "rust-test"
+      script:
+        -./qa/zcash/full_test_suite.py $TEST_TARGET
+      env:
+        - TEST_TARGET=rust-test
