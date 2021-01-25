@@ -99,12 +99,12 @@ fi
 # Work out which compiler we were called as 
 
 case $0 in
-*zcash-wrapper-clang|*gcc|*cc)
+*clang|*gcc|*cc)
   COMPILER="clang"
   export DEFINES_FLAGS="${CFLAGS} ${FUZZ_DEFINE_FLAGS} -fPIC"
   export INSTRUMENT_FLAGS="${DEFINES_FLAGS} ${LLVM_COVERAGE} ${LLVM_SANITIZE} -funroll-loops"
   ;;
-*zcash-wrapper-clang++|*g++|*c++)
+*clang++|*g++|*c++)
   COMPILER="clang++"
   export DEFINES_FLAGS="${CXXFLAGS} ${FUZZ_DEFINE_FLAGS} -fPIC"
   export INSTRUMENT_FLAGS="${DEFINES_FLAGS} ${LLVM_COVERAGE} ${LLVM_SANITIZE} -funroll-loops"
