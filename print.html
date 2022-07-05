@@ -76,7 +76,7 @@
 
         <nav id="sidebar" class="sidebar" aria-label="Table of contents">
             <div class="sidebar-scrollbox">
-                <ol class="chapter"><li class="chapter-item expanded affix "><a href="index.html">zcashd</a></li><li class="chapter-item expanded "><a href="user.html"><strong aria-hidden="true">1.</strong> User Documentation</a></li><li><ol class="section"><li class="chapter-item expanded "><a href="user/metrics.html"><strong aria-hidden="true">1.1.</strong> Metrics</a></li></ol></li><li class="chapter-item expanded "><a href="dev.html"><strong aria-hidden="true">2.</strong> Developer Documentation</a></li><li><ol class="section"><li class="chapter-item expanded "><a href="dev/rust.html"><strong aria-hidden="true">2.1.</strong> Rust in zcashd</a></li></ol></li><li class="chapter-item expanded "><a href="design.html"><strong aria-hidden="true">3.</strong> Design</a></li><li><ol class="section"><li class="chapter-item expanded "><a href="design/chain-state.html"><strong aria-hidden="true">3.1.</strong> Chain state</a></li><li class="chapter-item expanded "><a href="design/coins-view.html"><strong aria-hidden="true">3.2.</strong> &quot;Coins&quot; view</a></li><li class="chapter-item expanded "><a href="design/p2p-data-propagation.html"><strong aria-hidden="true">3.3.</strong> P2P data propagation</a></li></ol></li></ol>
+                <ol class="chapter"><li class="chapter-item expanded affix "><a href="index.html">zcashd</a></li><li class="chapter-item expanded "><a href="user.html"><strong aria-hidden="true">1.</strong> User Documentation</a></li><li><ol class="section"><li class="chapter-item expanded "><a href="user/platform-support.html"><strong aria-hidden="true">1.1.</strong> Platform Support</a></li><li class="chapter-item expanded "><a href="user/metrics.html"><strong aria-hidden="true">1.2.</strong> Metrics</a></li><li class="chapter-item expanded "><a href="user/deprecation.html"><strong aria-hidden="true">1.3.</strong> Deprecated Features</a></li></ol></li><li class="chapter-item expanded "><a href="dev.html"><strong aria-hidden="true">2.</strong> Developer Documentation</a></li><li><ol class="section"><li class="chapter-item expanded "><a href="dev/rust.html"><strong aria-hidden="true">2.1.</strong> Rust in zcashd</a></li><li class="chapter-item expanded "><a href="dev/regtest.html"><strong aria-hidden="true">2.2.</strong> Regtest tips and hints</a></li><li class="chapter-item expanded "><a href="dev/platform-tier-policy.html"><strong aria-hidden="true">2.3.</strong> Platform Tier Policy</a></li><li class="chapter-item expanded "><a href="dev/deprecation.html"><strong aria-hidden="true">2.4.</strong> Deprecation Procedure</a></li></ol></li><li class="chapter-item expanded "><a href="design.html"><strong aria-hidden="true">3.</strong> Design</a></li><li><ol class="section"><li class="chapter-item expanded "><a href="design/chain-state.html"><strong aria-hidden="true">3.1.</strong> Chain state</a></li><li class="chapter-item expanded "><a href="design/coins-view.html"><strong aria-hidden="true">3.2.</strong> "Coins" view</a></li><li class="chapter-item expanded "><a href="design/p2p-data-propagation.html"><strong aria-hidden="true">3.3.</strong> P2P data propagation</a></li></ol></li></ol>
             </div>
             <div id="sidebar-resize-handle" class="sidebar-resize-handle"></div>
         </nav>
@@ -135,7 +135,7 @@
 
                 <div id="content" class="content">
                     <main>
-                        <h1>Zcash 4.6.0-1
+                        <h1>Zcash 5.0.0
 <img align="right" width="120" height="80" src="doc/imgs/logo.png"></h1>
 <h2 id="what-is-zcash"><a class="header" href="#what-is-zcash">What is Zcash?</a></h2>
 <p><a href="https://z.cash/">Zcash</a> is an implementation of the &quot;Zerocash&quot; protocol.
@@ -183,7 +183,48 @@ for detailed instructions.</p>
 <p>This section contains user documentation specific to <code>zcashd</code>.</p>
 <p>See <a href="https://zcash.readthedocs.io/">here</a> for more general Zcash documentation, as well as
 installation instructions for <code>zcashd</code>.</p>
-<div style="break-before: page; page-break-before: always;"></div><h1 id="zcashd-metrics"><a class="header" href="#zcashd-metrics">zcashd metrics</a></h1>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="platform-support"><a class="header" href="#platform-support">Platform Support</a></h1>
+<p>Support for different platforms (build &quot;targets&quot; and operating systems) are organised into
+three tiers, each with a different set of guarantees. For more information on the policies
+for targets at each tier, see the <a href="user/../dev/platform-tier-policy.html">Platform Tier Policy</a>.</p>
+<h2 id="tier-1"><a class="header" href="#tier-1">Tier 1</a></h2>
+<p>Tier 1 platforms can be thought of as &quot;guaranteed to work&quot;. ECC builds official binary
+releases for each tier 1 platform, and automated testing ensures that each tier 1 platform
+builds and passes tests after each change.</p>
+<p>&quot;End of Support&quot; dates are the latest currently-known date after which the platform will
+be removed from tier 1. These dates are subject to change.</p>
+<div class="table-wrapper"><table><thead><tr><th>target</th><th>OS</th><th>End of Support</th></tr></thead><tbody>
+<tr><td><code>x86_64-pc-linux-gnu</code></td><td>CentOS 8</td><td>TBD</td></tr>
+<tr><td></td><td>Debian 10</td><td>June 2024</td></tr>
+<tr><td></td><td>Debian 11</td><td>June 2026</td></tr>
+<tr><td></td><td>Ubuntu 18.04</td><td>April 2023</td></tr>
+<tr><td></td><td>Ubuntu 20.04</td><td>April 2025</td></tr>
+</tbody></table>
+</div>
+<h2 id="tier-2"><a class="header" href="#tier-2">Tier 2</a></h2>
+<p>Tier 2 platforms can be thought of as &quot;guaranteed to build&quot;. ECC builds official binary
+releases for each tier 2 platform, and automated builds ensure that each tier 2 platform
+builds after each change. Automated tests are not always run so it's not guaranteed to
+produce a working build, but tier 2 platforms often work to quite a good degree, and
+patches are always welcome!</p>
+<p>&quot;End of Support&quot; dates are the latest currently-known date after which the platform will
+be removed from tier 2. These dates are subject to change.</p>
+<div class="table-wrapper"><table><thead><tr><th>target</th><th>OS</th><th>End of Support</th></tr></thead><tbody>
+<tr><td>N/A</td><td></td><td></td></tr>
+</tbody></table>
+</div>
+<h2 id="tier-3"><a class="header" href="#tier-3">Tier 3</a></h2>
+<p>Tier 3 platforms are those for which the <code>zcashd</code> codebase has support, but ECC does not
+require builds or tests to pass, so these may or may not work. Official builds are not
+available.</p>
+<div class="table-wrapper"><table><thead><tr><th>target</th><th>OS</th><th>notes</th></tr></thead><tbody>
+<tr><td><code>x86_64-pc-linux-gnu</code></td><td>Arch</td><td></td></tr>
+<tr><td><code>x86_64-unknown-freebsd</code></td><td>FreeBSD</td><td></td></tr>
+<tr><td><code>x86_64-w64-mingw32</code></td><td>Windows</td><td>64-bit MinGW</td></tr>
+<tr><td><code>x86_64-apple-darwin16</code></td><td>macOS 10.14+</td><td></td></tr>
+<tr><td><code>aarch64-linux-gnu</code></td><td>ARM64 Linux</td><td></td></tr>
+</tbody></table>
+</div><div style="break-before: page; page-break-before: always;"></div><h1 id="zcashd-metrics"><a class="header" href="#zcashd-metrics">zcashd metrics</a></h1>
 <h2 id="metrics-ui"><a class="header" href="#metrics-ui">Metrics UI</a></h2>
 <p>This is the user interface that <code>zcashd</code> displays by default when run. It
 displays a small selection of interesting metrics, but is not intended for
@@ -263,11 +304,92 @@ docker run --detach -p 9090:9090 --volume prometheus-storage:/prometheus --volum
 # Run Grafana
 docker run --detach -p 3030:3030 --env GF_SERVER_HTTP_PORT=3030 --volume grafana-storage:/var/lib/grafana grafana/grafana
 </code></pre>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="deprecated-features"><a class="header" href="#deprecated-features">Deprecated Features</a></h1>
+<p>In order to support the continuous improvement of <code>zcashd</code>, features are
+periodically deprecated and removed when they have been superseded or are no
+longer useful.  Deprecation follows a 3-stage process:</p>
+<ol>
+<li>Initially, a feature will be marked as DEPRECATED in the release notes and
+user-facing documentation, but no other changes are made; the feature
+continues to be available and function as normal. While features at this
+stage remain enabled by default, they may be explicitly disabled by
+specifying <code>-allowdeprecated=none</code> on the command line when starting the
+node, or by including <code>allowdeprecated=none</code> as a line in the <code>zcash.conf</code>
+file. </li>
+<li>In the next stage of deprecation, the feature will be disabled by default.
+Disabled features may be reenabled via use of the <code>-allowdeprecated</code> flag.</li>
+<li>In the third stage, the feature is fully removed and is no longer available.</li>
+</ol>
+<p>Features that enter Stage 1 in a particular release will be disabled by default
+after no fewer than 3 releases that update <code>zcashd</code>'s minor-version, and
+features will only be fully removed after a total of at least 6 minor-version updates.
+<code>zcashd</code>'s release schedule intends to produce a release that updates the minor
+version every 6 weeks, so deprecated features remain accessible by default for
+approximately 18 weeks, and then can be expected to be removed no less than 36
+weeks after their initial deprecation. Deprecation and removal timelines might
+be extended beyond this on a case-by-case basis to satisfy user requirements. </p>
+<h1 id="currently-deprecated"><a class="header" href="#currently-deprecated">Currently Deprecated</a></h1>
+<h2 id="stage-1"><a class="header" href="#stage-1">Stage 1</a></h2>
+<p>The following features are deprecated, but remain enabled by default. These features
+will be disabled if <code>-allowdeprecated=none</code> is added to the CLI arguments when starting
+the node, or if an <code>allowdeprecated=none</code> line is added to <code>zcash.conf</code>.</p>
+<h3 id="deprecated-in-500"><a class="header" href="#deprecated-in-500">Deprecated in 5.0.0</a></h3>
+<p>The following features are deprecated as of release 5.0.0 and will be disabled by
+default as of release 5.3.0.</p>
+<ul>
+<li><code>legacy_privacy</code> - The default &quot;legacy&quot; privacy policy for z_sendmany is
+deprecated. Use <code>-allowdeprecated=none</code> to require the default behavior to
+conform to the <code>FullPrivacy</code> directive in all cases instead of just for
+transactions involving unified addresses. </li>
+<li><code>getnewaddress</code> - The <code>getnewaddress</code> RPC method is deprecated.</li>
+<li><code>getrawchangeaddress</code> - The <code>getrawchangeaddress</code> RPC method is deprecated.</li>
+<li><code>z_getbalance</code> - The <code>z_getbalance</code> RPC method is deprecated.</li>
+<li><code>z_gettotalbalance</code> - The <code>z_gettotalbalance</code> RPC method is deprecated.</li>
+<li><code>z_getnewaddress</code> - The <code>z_getnewaddress</code> RPC method is deprecated.</li>
+<li><code>z_listaddresses</code> - The <code>z_listaddresses</code> RPC method is deprecated.</li>
+<li><code>addrtype</code> - The <code>type</code> attribute is deprecated in the results of RPC
+methods that return address metadata. It is recommended that applications
+using this metadata be updated to use the <code>pool</code> or <code>address_type</code>
+attributes, which have replaced the <code>type</code> attribute, as appropriate.</li>
+</ul>
+<h3 id="deprecated-in-510"><a class="header" href="#deprecated-in-510">Deprecated in 5.1.0</a></h3>
+<ul>
+<li><code>wallettxvjoinsplit</code> - The <code>vjoinsplit</code> attribute returned by the
+<code>gettransaction</code> RPC method is deprecated.</li>
+</ul>
+<h2 id="stage-2"><a class="header" href="#stage-2">Stage 2</a></h2>
+<p>Each feature in the lists below may be enabled by adding <code>-allowdeprecated=&lt;feature&gt;</code>
+to the CLI arguments when starting the node, or by adding an <code>allowdeprecated=&lt;feature&gt;</code>
+line to <code>zcash.conf</code>.</p>
+<h3 id="disabled-in-500"><a class="header" href="#disabled-in-500">Disabled in 5.0.0</a></h3>
+<p>The following features are disabled by default, and will be removed in release 5.3.0.</p>
+<ul>
+<li><code>zcrawreceive</code> - The <code>zcrawreceive</code> RPC method is disabled.</li>
+<li><code>zcrawjoinsplit</code> - The <code>zcrawjoinsplit</code> RPC method is disabled.</li>
+<li><code>zcrawkeygen</code> - The <code>zcrawkeygen</code> RPC method is disabled.</li>
+</ul>
+<h3 id="disabled-in-501"><a class="header" href="#disabled-in-501">Disabled in 5.0.1</a></h3>
+<p>The following features are disabled by default, and will be removed in release 5.3.0.</p>
+<ul>
+<li><code>dumpwallet</code> - The <code>dumpwallet</code> RPC method is disabled.</li>
+</ul>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="developer-documentation"><a class="header" href="#developer-documentation">Developer Documentation</a></h1>
 <p>This section contains documentation aimed at contributors to the <code>zcashd</code> codebase.</p>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="rust-in-zcashd"><a class="header" href="#rust-in-zcashd">Rust in <code>zcashd</code></a></h1>
 <p><code>zcashd</code> is primarily a C++ codebase, but most new code is being written in Rust
 where possible.</p>
+<h2 id="auditing-rust-dependencies"><a class="header" href="#auditing-rust-dependencies">Auditing Rust dependencies</a></h2>
+<p>We use <a href="https://github.com/mozilla/cargo-vet"><code>cargo-vet</code></a> to audit our Rust dependencies. This means that after
+adding a new dependency, or updating existing dependencies with <code>cargo update</code>,
+CI will fail until corresponding audits have been added.</p>
+<p>We also have a significant number of pre-existing unaudited dependency versions
+that are excluded from auditing checks. We aim to reduce this list over time.
+New entries should not be added to the exclusion list without justification.</p>
+<p>To audit a dependency, first <a href="https://mozilla.github.io/cargo-vet/install.html">install <code>cargo-vet</code></a> and then follow the
+<a href="https://mozilla.github.io/cargo-vet/performing-audits.html">&quot;Performing Audits&quot; guide</a>. If you are updating a dependency then instead of
+auditing the new version in its entirety, you can optionally just audit the
+delta between the old and new versions - even if the old version is in the
+&quot;unaudited&quot; exclusion list.</p>
 <h2 id="adding-new-dependencies-in-online-rust-mode"><a class="header" href="#adding-new-dependencies-in-online-rust-mode">Adding new dependencies in online-Rust mode</a></h2>
 <p>The <code>zcashd</code> build system pins all dependencies, and in order to facilitate
 deterministic builds, <code>cargo</code> is configured to run in offline mode with vendored
@@ -308,6 +430,300 @@ orchard = { path = &quot;../relative/path/to/orchard&quot; }
 <p>Usually you can apply a patch to use a locally checked out dependency without
 needing to build <code>zcashd</code> in online-Rust mode. However, if your local changes
 include a new dependency, you will need to ensure you are in online-Rust mode.</p>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="regtest"><a class="header" href="#regtest">Regtest</a></h1>
+<p><em>Regtest</em> (&quot;regression test&quot;) is one of the three <em>network types</em>
+supported by Zcash, the others being <code>testnet</code> and <code>mainnet</code>.
+Regtest is an entirely local, self-contained mode -- your node or nodes
+do not talk with peers out in the world. It gives you complete
+control of the state of the blockchain and the sequence of events.
+You start with an empty blockchain (just the genesis block, block 0).
+Blocks can be mined instantly, and must be created explicitly. </p>
+<p>You can run one or more regtest nodes on the same system.
+The <a href="https://github.com/zcash/zcash/tree/master/qa/rpc-tests">RPC tests</a>
+use <code>regtest</code> mode (usually starting multiple nodes), but you may use it
+manually and interactively to learn, test, and experiment. Most often
+just one node is used in this case.</p>
+<h2 id="example-session"><a class="header" href="#example-session">Example session</a></h2>
+<p>Here's a sample session (after you've built <code>zcashd</code> and <code>zcash-cli</code>):</p>
+<pre><code>$ mkdir /tmp/regtest-datadir
+$ cat &lt;&lt;EOF &gt;/tmp/regtest-datadir/zcash.conf
+regtest=1
+rpcuser=u
+rpcpassword=p
+rpcport=18132
+EOF
+$ src/zcashd -daemon -datadir=/tmp/regtest-datadir
+</code></pre>
+<p>Watch <code>tmp/regtest-datadir/regtest/debug.log</code> to see what <code>zcashd</code> is doing.
+It may also be useful to start <code>zcashd</code> with <code>-debug</code> to generate much
+more logging. Now we can send RPCs to the node:</p>
+<pre><code>$ src/zcash-cli -datadir=/tmp/regtest-datadir getblockchaininfo
+{
+  &quot;chain&quot;: &quot;regtest&quot;,
+  &quot;blocks&quot;: 0,
+  &quot;initial_block_download_complete&quot;: false,
+  &quot;headers&quot;: 0,
+  (...)
+}
+# Generate (mine) three blocks:
+$ src/zcash-cli -datadir=/tmp/regtest-datadir generate 3
+[
+  &quot;05040271f43f78e3870a88697eba201aa361ea5802c69eadaf920ff376787242&quot;,
+  &quot;0469f2df43dda69d521c482679b2db3c637b1721222511302584ac75e057c859&quot;,
+  &quot;0ab7a26e7b3b5dfca077728de90da0cfd1c49e1edbc130a52de4062b1aecac75&quot;
+]
+$ src/zcash-cli -datadir=/tmp/regtest-datadir getblockchaininfo
+{
+  &quot;chain&quot;: &quot;regtest&quot;,
+  &quot;blocks&quot;: 3,
+  &quot;initial_block_download_complete&quot;: true,
+  &quot;headers&quot;: 3,
+  (...)
+}
+$ src/zcash-cli -datadir=/tmp/regtest-datadir stop
+Zcash server stopping
+$ 
+</code></pre>
+<h2 id="network-upgrades"><a class="header" href="#network-upgrades">Network upgrades</a></h2>
+<p>Zcash has adopted a series of
+<a href="https://github.com/zcash/zcash/blob/master/src/consensus/upgrades.cpp">network upgrades</a>.
+On <code>mainnet</code> and <code>testnet</code>, these activate at
+fixed, known block heights (<a href="https://github.com/zcash/zcash/blob/master/src/chainparams.cpp#L117">example</a>).
+In <code>regtest</code> mode, you determine the activation heights. Upgrades may occur at
+any height greater than 0, and multiple upgrades can occur at the same height. The upgrades
+have a strict ordering (as shown in the upgrades source file); for example, Canopy can't
+be activated before Blossom. </p>
+<p>You specify the upgrade heights using multiple <code>-nuparams=</code><em>&lt;branch-id&gt;</em> arguments.
+(The branch IDs are available in the
+<a href="https://github.com/zcash/zcash/blob/master/src/consensus/upgrades.cpp">upgrades.cpp file</a>)
+It's convenient to add these to the configuration file, for example:</p>
+<pre><code>$ cat &lt;&lt;EOF &gt;&gt;/tmp/regtest-datadir/zcash.conf
+nuparams=76b809bb:1
+nuparams=f5b9230b:5
+EOF
+</code></pre>
+<p>(Alternatively, you can specify these on the <code>zcashd</code> command line.)
+You need not activate every upgrade explicitly. The example activates Sapling
+(branchID 76b809bb) at height 1; activating Sapling implies activating Overwinter, so this
+is done automatically. Similarly, activating Heartwood at height 5
+also simultaneously activates Blossom. Since no later upgrades are specified, none
+of them will activate, regardless of height reached.</p>
+<p><strong>IMPORTANT</strong>: if you change the network upgrade heights from one
+test run to the next, it's almost always necessary to start fresh
+by removing the data directory, otherwise you'll encounter strange errors.</p>
+<p>You can see which network upgrades are currently active and which are pending
+(using the above <code>nuparams</code> settings as an example):</p>
+<pre><code>$ src/zcash-cli -datadir=/tmp/regtest-datadir generate 2
+$ src/zcash-cli -datadir=/tmp/regtest-datadir getblockchaininfo
+{
+  &quot;blocks&quot;: 2,
+  (...)
+    &quot;upgrades&quot;: {
+    &quot;5ba81b19&quot;: {
+      &quot;name&quot;: &quot;Overwinter&quot;,
+      &quot;activationheight&quot;: 1,
+      &quot;status&quot;: &quot;active&quot;,
+      &quot;info&quot;: &quot;See https://z.cash/upgrade/overwinter/ for details.&quot;
+    },
+    &quot;76b809bb&quot;: {
+      &quot;name&quot;: &quot;Sapling&quot;,
+      &quot;activationheight&quot;: 1,
+      &quot;status&quot;: &quot;active&quot;,
+      &quot;info&quot;: &quot;See https://z.cash/upgrade/sapling/ for details.&quot;
+    },
+    &quot;2bb40e60&quot;: {
+      &quot;name&quot;: &quot;Blossom&quot;,
+      &quot;activationheight&quot;: 5,
+      &quot;status&quot;: &quot;pending&quot;,
+      &quot;info&quot;: &quot;See https://z.cash/upgrade/blossom/ for details.&quot;
+    },
+    &quot;f5b9230b&quot;: {
+      &quot;name&quot;: &quot;Heartwood&quot;,
+      &quot;activationheight&quot;: 5,
+      &quot;status&quot;: &quot;pending&quot;,
+      &quot;info&quot;: &quot;See https://z.cash/upgrade/heartwood/ for details.&quot;
+    }
+  },
+  (...)
+}
+</code></pre>
+<h2 id="manual-testing-within-an-rpc-python-test-run"><a class="header" href="#manual-testing-within-an-rpc-python-test-run">Manual testing within an RPC (Python) test run</a></h2>
+<p>It is often useful, either when debugging an issue or simply when you want to put
+the node into a certain state, to use the RPC test framework to produce the desired
+state and then be able to manually interrogate and modify that state using <code>zcash-cli</code> 
+to execute RPC calls. An easy way to do that is as follows:</p>
+<p>Add the line <code>import time; time.sleep(999999)</code> (the units are seconds) somewhere
+within an RPC test to pause its execution at that point. Start the test, and then:</p>
+<pre><code>$ ps alx | grep zcashd
+0  1000   96247   96246  20   0 1426304 123952 futex_ SLl+ pts/12   0:18 /g/zcash/src/zcashd -datadir=/tmp/test9d907s8a/96246/node0 -keypool=1 -discover=0 -rest -nuparams=5ba81b19:1 -nuparams=76b809bb:1 -debug=mempool -mempooltxcostlimit=8000
+0  1000   96274   96246  20   0 744092 85568 -      RLl+ pts/12     0:05 /g/zcash/src/zcashd -datadir=/tmp/test9d907s8a/96246/node1 -keypool=1 -discover=0 -rest -nuparams=5ba81b19:1 -nuparams=76b809bb:1 -debug=mempool -mempooltxcostlimit=8000
+$ 
+</code></pre>
+<p>Now you can interact with the running test node by copy-and-pasting its
+<code>-datadir</code> argument, for example:</p>
+<pre><code>$ src/zcash-cli -datadir=/tmp/test9d907s8a/96246/node0 getblockchaininfo
+</code></pre>
+<p>(The other <code>zcashd</code> command-line arguments are generally not needed by
+<code>zcash-cli</code>.) You can see the running node's debug log file:</p>
+<pre><code>$ cat /tmp/test9d907s8a/96246/node0/regtest/debug.log
+</code></pre>
+<p>or look at its configuration file.</p>
+<pre><code>$ cat /tmp/test9d907s8a/96246/node0/zcash.conf
+</code></pre>
+<p>In this way, the RPC test framework can teach us more about running <code>regtest</code> nodes.</p>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="platform-tier-policy"><a class="header" href="#platform-tier-policy">Platform Tier Policy</a></h1>
+<h2 id="general"><a class="header" href="#general">General</a></h2>
+<p>ECC provides three tiers of platform support, modeled after the
+<a href="https://doc.rust-lang.org/stable/rustc/platform-tier-policy.html">Rust Target Tier Policy</a>:</p>
+<ul>
+<li>The Zcash developers provide no guarantees about tier 3 platforms; they exist in the
+codebase, but may or may not build.</li>
+<li>ECC's continuous integration checks that tier 2 platforms will always build, but they
+may or may not pass tests.</li>
+<li>ECC's continuous integration checks that tier 1 platforms will always build and pass
+tests.</li>
+</ul>
+<p>Adding a new tier 3 platform imposes minimal requirements; we focus primarily on avoiding
+disruption to other ongoing Zcash development.</p>
+<p>Tier 2 and tier 1 platforms place work on Zcash developers as a whole, to avoid breaking
+the platform. The broader Zcash community may also feel more inclined to support
+higher-tier platforms in their downstream uses of <code>zcashd</code> (though they are not obligated
+to do so). Thus, these tiers require commensurate and ongoing efforts from the maintainers
+of the platform, to demonstrate value and to minimize any disruptions to ongoing Zcash
+development.</p>
+<p>This policy defines the requirements for accepting a proposed platform at a given level of
+support.</p>
+<p>Each tier builds on all the requirements from the previous tier, unless overridden by a
+stronger requirement.</p>
+<p>While these criteria attempt to document the policy, that policy still involves human
+judgment. Platforms must fulfill the spirit of the requirements as well, as determined by
+the judgment of the approving reviewers. Reviewers and team members evaluating platforms
+and platform-specific patches should always use their own best judgment regarding the
+quality of work, and the suitability of a platform for the Zcash project. Neither this
+policy nor any decisions made regarding platforms shall create any binding agreement or
+estoppel by any party.</p>
+<p>For a list of all supported platforms and their corresponding tiers (&quot;tier 3&quot;, &quot;tier 2&quot;,
+or &quot;tier 1&quot;), see <a href="dev/../user/platform-support.html">Platform Support</a>.</p>
+<p>The availability or tier of a platform in Zcash releases is not a hard stability guarantee
+about the future availability or tier of that platform. Higher-level platform tiers are an
+increasing commitment to the support of a platform, and we will take that commitment and
+potential disruptions into account when evaluating the potential demotion or removal of a
+platform that has been part of a stable release. The promotion or demotion of a platform
+will not generally affect existing stable releases, only current development and future
+releases.</p>
+<p>In this policy, the words &quot;MUST&quot; and &quot;MUST NOT&quot; specify absolute requirements that a
+platform must meet to qualify for a tier. The words &quot;SHOULD&quot; and &quot;SHOULD NOT&quot; specify
+requirements that apply in almost all cases, but for which the approving teams may grant
+an exception for good reason. The word &quot;MAY&quot; indicates something entirely optional, and
+does not indicate guidance or recommendations. This language is based on
+<a href="https://tools.ietf.org/html/rfc2119">IETF RFC 2119</a>.</p>
+<h2 id="tier-3-platform-policy"><a class="header" href="#tier-3-platform-policy">Tier 3 platform policy</a></h2>
+<p>At this tier, ECC provides no official support for a platform, so we place minimal
+requirements on the introduction of platforms.</p>
+<p>A proposed new tier 3 platform MUST be reviewed and approved by a member of the ECC core
+team based on these requirements.</p>
+<ul>
+<li>The platform MUST provide documentation for the Zcash community explaining how to build
+for the platform, using cross-compilation if possible. If the platform supports running
+binaries, or running tests (even if they do not pass), the documentation MUST explain
+how to run such binaries or tests for the platform, using emulation if possible or
+dedicated hardware if necessary.</li>
+<li>Tier 3 platforms MUST NOT impose burden on the authors of pull requests, or other
+developers in the community, to maintain the platform. In particular, do not post
+comments (automated or manual) on a PR that derail or suggest a block on the PR based on
+a tier 3 platform. Do not send automated messages or notifications (via any medium,
+including via @) to a PR author or others involved with a PR regarding a tier 3
+platform, unless they have opted into such messages.</li>
+<li>Patches adding or updating tier 3 platforms MUST NOT break any existing tier 2 or tier 1
+platform, and MUST NOT knowingly break another tier 3 platform without approval of the
+ECC core team.</li>
+</ul>
+<p>If a tier 3 platform stops meeting these requirements, or the platform shows no signs of
+activity and has not built for some time, or removing the platform would improve the
+quality of the Zcash codebase, we MAY post a PR to remove it.</p>
+<h2 id="tier-2-platform-policy"><a class="header" href="#tier-2-platform-policy">Tier 2 platform policy</a></h2>
+<p>At this tier, the Zcash developers guarantee that a platform builds, and will reject
+patches that fail to build for a platform. Thus, we place requirements that ensure the
+platform will not block forward progress of the Zcash project.</p>
+<p>A proposed new tier 2 platform MUST be reviewed and approved by the ECC core team based
+on these requirements.</p>
+<p>In addition, the ECC infrastructure team MUST approve the integration of the platform into
+Continuous Integration (CI), and the tier 2 CI-related requirements. This review and
+approval MAY take place in a PR adding the platform to CI, or simply by an infrastructure
+team member reporting the outcome of a team discussion.</p>
+<ul>
+<li>A tier 2 platform MUST have value to people other than its proponents. (It MAY still be
+a niche platform, but it MUST NOT be exclusively useful for an inherently closed group.)</li>
+<li>A tier 2 platform MUST have a designated team of developers (the &quot;platform maintainers&quot;)
+supporting it, without the need for a paid support contract.</li>
+<li>The platform MUST NOT place undue burden on Zcash developers not specifically concerned
+with that platform. Zcash developers are expected to not gratuitously break a tier 2
+platform, but are not expected to become experts in every tier 2 platform, and are not
+expected to provide platform-specific implementations for every tier 2 platform.</li>
+<li>The platform MUST build reliably in CI, for all components that ECC's CI considers
+mandatory.</li>
+<li>All requirements for tier 3 apply.</li>
+</ul>
+<p>A tier 2 platform MAY be demoted or removed if it no longer meets these requirements.</p>
+<h2 id="tier-1-platform-policy"><a class="header" href="#tier-1-platform-policy">Tier 1 platform policy</a></h2>
+<p>At this tier, the Zcash developers guarantee that a platform builds and passes all tests,
+and will reject patches that fail to build or pass the test suite on a platform. We hold
+tier 1 platforms to our highest standard of requirements.</p>
+<ul>
+<li>Tier 1 platforms MUST have substantial, widespread interest within the Zcash community,
+and MUST serve the ongoing needs of multiple production users of Zcash across multiple
+organizations or projects. These requirements are subjective. A tier 1 platform MAY be
+demoted or removed if it becomes obsolete or no longer meets this requirement.</li>
+<li>The platform MUST build and pass tests reliably in CI, for all components that ECC's CI
+considers mandatory.</li>
+<li>Building the platform and running the test suite for the platform MUST NOT take
+substantially longer than other platforms, and SHOULD NOT substantially raise the
+maintenance burden of the CI infrastructure.</li>
+<li>Tier 1 platforms MUST NOT have a hard requirement for signed, verified, or otherwise
+&quot;approved&quot; binaries. Developers MUST be able to build, run, and test binaries for the
+platform on systems they control, or provide such binaries for others to run. (Doing so
+MAY require enabling some appropriate &quot;developer mode&quot; on such systems, but MUST NOT
+require the payment of any additional fee or other consideration, or agreement to any
+onerous legal agreements.)</li>
+<li>All requirements for tier 2 apply.</li>
+</ul>
+<p>A tier 1 platform MAY be demoted or removed if it no longer meets these requirements but
+still meets the requirements for a lower tier.</p>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="deprecation-procedure"><a class="header" href="#deprecation-procedure">Deprecation Procedure</a></h1>
+<p>From time to time, features of <code>zcashd</code> and its associated wallet and RPC API are
+deprecated to allow eventual removal of functionality that has been superseded
+by more recent improvements. Deprecation follows a process whereby deprecate
+features can be explicitly turned on or off using the
+<code>-allowdeprecated=&lt;feature&gt;</code> CLI argument.</p>
+<p><code>zcashd</code> internally supports two sets of deprecated feature flags in
+<code>src/deprecation.h</code>:</p>
+<ul>
+<li><code>DEFAULT_ALLOW_DEPRECATED</code> contains the set of features that remain available
+for use without having to be specifically enabled using <code>-allowdeprecated</code>.</li>
+<li><code>DEFAULT_DENY_DEPRECATED</code> contains the set of features that are not enabled
+by default, and must be explicitly enabled using <code>-allowdeprecated</code>.</li>
+</ul>
+<p>Deprecation of a feature occurs as a 3-step process:</p>
+<ol>
+<li>A deprecation flag is selected for the feature, and added to
+<code>DEFAULT_ALLOW_DEPRECATED</code>. The fact of its deprecation is announced, and
+any functionality that supersedes the deprecated feature (if any) is
+documented, in the release notes. The string <code>DEPRECATED</code> is added to
+user-facing API documentation and CLI help text.</li>
+<li>The deprecation flag is removed from <code>DEFAULT_ALLOW_DEPRECATED</code> and added to
+<code>DEFAULT_DENY_DEPRECATED</code>.</li>
+<li>The deprecated feature is removed entirely, and its deprecation flag is
+removed.</li>
+</ol>
+<p>Features that enter Stage 1 in a particular release should be disabled by
+default after no fewer than 3 releases that update <code>zcashd</code>'s
+minor-version, and features should only be fully removed after a total of 6 minor-version
+updates. <code>zcashd</code>'s release schedule intends to produce a release that updates
+the minor version every 6 weeks, so deprecated features remain accessible by
+default for approximately 18 weeks, and then can be expected to be removed no
+less than 36 weeks from their initial deprecation. The deprecation timeline for
+each newly deprecated feature should be documented in
+<a href="dev/../user/deprecation.html">../user/deprecation.md</a>.</p>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="design"><a class="header" href="#design">Design</a></h1>
 <p>Zcash was originally a fork of Bitcoin 0.11.2, and as such the <code>zcashd</code> node architecture
 is very similar to <code>bitcoind</code>. There are however several differences, most notably the
