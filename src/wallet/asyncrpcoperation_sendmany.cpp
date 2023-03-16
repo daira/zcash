@@ -66,7 +66,7 @@ AsyncRPCOperation_sendmany::AsyncRPCOperation_sendmany(
 
     // Determine the target totals and recipient pools
     for (const ResolvedPayment& recipient : recipients_) {
-        std::visit(match {
+        examine(recipient.address, match {
             [&](const CKeyID& addr) {
                 txOutputAmounts_.t_outputs_total += recipient.amount;
                 recipientPools_.insert(OutputPool::Transparent);
@@ -85,7 +85,7 @@ AsyncRPCOperation_sendmany::AsyncRPCOperation_sendmany(
                 // No transaction allows sends from Sprout to Orchard.
                 assert(!ztxoSelector_.SelectsSprout());
             }
-        }, recipient.address);
+        });
     }
 
     // Log the context info i.e. the call parameters to z_sendmany
@@ -390,7 +390,7 @@ uint256 AsyncRPCOperation_sendmany::main_impl() {
         }
     };
 
-    std::visit(match {
+    examine(ztxoSelector_.GetPattern(), match {
         [&](const CKeyID& keyId) {
             allowedChangeTypes.insert(OutputPool::Transparent);
             auto changeAddr = pwalletMain->GenerateChangeAddressForAccount(
@@ -477,7 +477,7 @@ uint256 AsyncRPCOperation_sendmany::main_impl() {
             assert(changeAddr.has_value());
             builder_.SendChangeTo(changeAddr.value(), ovks.first);
         }
-    }, ztxoSelector_.GetPattern());
+    });
 
     // Track the total of notes that we've added to the builder. This
     // shouldn't strictly be necessary, given `spendable.LimitToAmount`
@@ -548,7 +548,7 @@ uint256 AsyncRPCOperation_sendmany::main_impl() {
 
     // Add outputs
     for (const auto& r : recipients_) {
-        std::visit(match {
+        examine(r.address, match {
             [&](const CKeyID& keyId) {
                 builder_.AddTransparentOutput(keyId, r.amount);
             },
@@ -565,7 +565,7 @@ uint256 AsyncRPCOperation_sendmany::main_impl() {
                         ovks.second, addr, r.amount,
                         r.memo.has_value() ? std::optional(r.memo.value().ToBytes()) : std::nullopt);
             }
-        }, r.address);
+        });
     }
 
     // Add transparent utxos
@@ -634,7 +634,7 @@ std::pair<uint256, uint256> AsyncRPCOperation_sendmany::SelectOVKs(const Spendab
     uint256 externalOVK;
     if (!spendable.orchardNoteMetadata.empty()) {
         std::optional<OrchardFullViewingKey> fvk;
-        std::visit(match {
+        examine(this->ztxoSelector_.GetPattern(), match {
             [&](const UnifiedAddress& addr) {
                 auto ufvk = pwalletMain->GetUFVKForAddress(addr);
                 // This is safe because spending key checks will have ensured that we
@@ -657,14 +657,14 @@ std::pair<uint256, uint256> AsyncRPCOperation_sendmany::SelectOVKs(const Spendab
             [&](const auto& other) {
                 throw std::runtime_error("SelectOVKs: Selector cannot select Orchard notes.");
             }
-        }, this->ztxoSelector_.GetPattern());
+        });
         assert(fvk.has_value());
 
         internalOVK = fvk.value().ToInternalOutgoingViewingKey();
         externalOVK = fvk.value().ToExternalOutgoingViewingKey();
     } else if (!spendable.saplingNoteEntries.empty()) {
         std::optional<SaplingDiversifiableFullViewingKey> dfvk;
-        std::visit(match {
+        examine(this->ztxoSelector_.GetPattern(), match {
             [&](const libzcash::SaplingPaymentAddress& addr) {
                 libzcash::SaplingExtendedSpendingKey extsk;
                 assert(pwalletMain->GetSaplingExtendedSpendingKey(addr, extsk));
@@ -692,7 +692,7 @@ std::pair<uint256, uint256> AsyncRPCOperation_sendmany::SelectOVKs(const Spendab
             [&](const auto& other) {
                 throw std::runtime_error("SelectOVKs: Selector cannot select Sapling notes.");
             }
-        }, this->ztxoSelector_.GetPattern());
+        });
         assert(dfvk.has_value());
 
         auto ovks = dfvk.value().GetOVKs();
@@ -700,7 +700,7 @@ std::pair<uint256, uint256> AsyncRPCOperation_sendmany::SelectOVKs(const Spendab
         externalOVK = ovks.second;
     } else if (!spendable.utxos.empty()) {
         std::optional<transparent::AccountPubKey> tfvk;
-        std::visit(match {
+        examine(this->ztxoSelector_.GetPattern(), match {
             [&](const CKeyID& keyId) {
                 tfvk = pwalletMain->GetLegacyAccountKey().ToAccountPubKey();
             },
@@ -733,7 +733,7 @@ std::pair<uint256, uint256> AsyncRPCOperation_sendmany::SelectOVKs(const Spendab
             [&](const auto& other) {
                 throw std::runtime_error("SelectOVKs: Selector cannot select transparent UTXOs.");
             }
-        }, this->ztxoSelector_.GetPattern());
+        });
         assert(tfvk.has_value());
 
         auto ovks = tfvk.value().GetOVKsForShielding();
