@@ -3618,7 +3618,7 @@ UniValue z_listreceivedbyaddress(const UniValue& params, bool fHelp)
 
     // A non-unified address argument that is a receiver within a
     // unified address known to this wallet is not allowed.
-    if (examine(decoded.value(), match {
+    if (examine_to<bool>(decoded.value(), match {
         [&](const CKeyID& addr) {
             return pwalletMain->FindUnifiedAddressByReceiver(addr).has_value();
          },

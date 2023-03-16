@@ -351,7 +351,7 @@ void BlockAssembler::resetBlock(const MinerAddress& minerAddress)
 
     // Reserve space for coinbase tx
     // nBlockMaxSize already includes 1000 bytes for transaction structure overhead.
-    nBlockSize = examine(minerAddress, match {
+    nBlockSize = examine_to<uint64_t>(minerAddress, match {
         [](const libzcash::OrchardRawAddress&) { return 9000; },
         [](const libzcash::SaplingPaymentAddress&) { return 1000; },
         [](const boost::shared_ptr<CReserveScript> &) { return 1000; },

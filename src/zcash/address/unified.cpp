@@ -33,7 +33,7 @@ bool libzcash::HasTransparent(const std::set<ReceiverType>& receiverTypes) {
 }
 
 Receiver libzcash::RecipientAddressToReceiver(const RecipientAddress& recipient) {
-    return examine(recipient, match {
+    return examine_to<Receiver>(recipient, match {
         [](const CKeyID& key) { return Receiver(key); },
         [](const CScriptID& scriptId) { return Receiver(scriptId); },
         [](const libzcash::OrchardRawAddress& addr) { return Receiver(addr); },
@@ -42,7 +42,7 @@ Receiver libzcash::RecipientAddressToReceiver(const RecipientAddress& recipient)
 }
 
 std::string libzcash::DebugPrintReceiver(const Receiver& receiver) {
-    return examine(receiver, match {
+    return examine_to<std::string>(receiver, match {
         [&](const OrchardRawAddress &zaddr) {
             CDataStream ss(SER_NETWORK, PROTOCOL_VERSION);
             ss << zaddr;

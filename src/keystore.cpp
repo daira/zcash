@@ -19,7 +19,7 @@ std::optional<AddressUFVKMetadata> CKeyStore::GetUFVKMetadataForAddress(
         const CTxDestination& address) const
 {
     auto self = this;
-    return examine(address, match {
+    return examine_to<std::optional<AddressUFVKMetadata>>(address, match {
             [](const CNoDestination&) -> std::optional<AddressUFVKMetadata> { return std::nullopt; },
             [&](const auto& addr) { return self->GetUFVKMetadataForReceiver(addr); }
     });

@@ -50,7 +50,7 @@ public:
     }
 
     static Memo FromHexOrThrow(const std::string& memoHex) {
-        return examine(Memo::FromHex(memoHex), match {
+        return examine_to<Memo>(Memo::FromHex(memoHex), match {
             [&](Memo memo) {
                 return memo;
             },

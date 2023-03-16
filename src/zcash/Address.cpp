@@ -194,7 +194,7 @@ std::optional<RecipientAddress> UnifiedAddress::GetPreferredRecipientAddress(
 }
 
 bool HasKnownReceiverType(const Receiver& receiver) {
-    return examine(receiver, match {
+    return examine_to<bool>(receiver, match {
         [](const OrchardRawAddress& addr) { return true; },
         [](const SaplingPaymentAddress& addr) { return true; },
         [](const CScriptID& addr) { return true; },

@@ -21,18 +21,28 @@ template<class... Ts> struct match : Ts... { using Ts::operator()...; };
 // explicit deduction guide (not needed as of C++20)
 template<class... Ts> match(Ts...) -> match<Ts...>;
 
-// A wrapper around two-argument `std::visit` that reverses the arguments, putting the
-// value to be visited first. This is normally used as:
+// A wrapper around two-argument `std::visit` (for `void` return type) that reverses
+// the arguments, putting the value to be visited first. This is normally used as:
 //
 // examine(specimen, match {
 //     ...
-// })
-//
-// The return type is inferred as it would be for `std::visit`.
-#define examine(specimen, visitor...) (std::visit(single_arg(visitor), (specimen)))
+// });
+template <typename S, typename V>
+void examine(const S& specimen, const V& visitor) {
+    return std::visit(visitor, specimen);
+}
 
-// This prevents confusing errors if more than two arguments are passed to examine.
-template <typename T>
-constexpr const T& single_arg(const T& x) { return x; }
+// A wrapper around two-argument `std::visit` (for a non-`void` return type) that reverses
+// the arguments, putting the value to be visited first. This is normally used as:
+//
+// examine_to<R>(specimen, match {
+//     ...
+// });
+//
+// Note that unlike `std::visit`, `R` cannot be inferred.
+template <typename R, typename S, typename V>
+R examine_to(const S& specimen, const V& visitor) {
+    return std::visit(visitor, specimen);
+}
 
 #endif // ZCASH_UTIL_MATCH_H

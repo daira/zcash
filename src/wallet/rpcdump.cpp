@@ -929,7 +929,7 @@ UniValue z_exportkey(const UniValue& params, bool fHelp)
         throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "Invalid zaddr");
     }
 
-    std::string result = examine(address.value(), match {
+    std::string result = examine_to<std::string>(address.value(), match {
         [&](const CKeyID& addr) {
             CKey key;
             if (pwalletMain->GetKey(addr, key)) {

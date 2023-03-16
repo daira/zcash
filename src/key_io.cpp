@@ -468,7 +468,7 @@ std::optional<libzcash::PaymentAddress> KeyIO::DecodePaymentAddress(const std::s
     }
 
     // Finally, try parsing as transparent
-    return examine(DecodeDestination(str), match {
+    return examine_to<std::optional<libzcash::PaymentAddress>>(DecodeDestination(str), match {
         [](const CKeyID& keyIdIn) {
             std::optional<libzcash::PaymentAddress> keyId = keyIdIn;
             return keyId;
