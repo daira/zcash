@@ -352,110 +352,104 @@ std::pair<uint256, uint256> WalletTxBuilder::SelectOVKs(
     uint256 internalOVK;
     uint256 externalOVK;
     if (!spendable.orchardNoteMetadata.empty()) {
-        std::optional<OrchardFullViewingKey> fvk;
-        examine(selector.GetPattern(), match {
+        OrchardFullViewingKey fvk = examine(selector.GetPattern(), match {
             [&](const UnifiedAddress& ua) {
                 auto ufvk = wallet.GetUFVKForAddress(ua);
                 // This is safe because spending key checks will have ensured that we
                 // have a UFVK corresponding to this address, and Orchard notes will
                 // not have been selected if the UFVK does not contain an Orchard key.
-                fvk = ufvk.value().GetOrchardKey().value();
+                return ufvk.value().GetOrchardKey().value();
             },
             [&](const UnifiedFullViewingKey& ufvk) {
                 // Orchard notes will not have been selected if the UFVK does not contain
                 // an Orchard key.
-                fvk = ufvk.GetOrchardKey().value();
+                return ufvk.GetOrchardKey().value();
             },
             [&](const AccountZTXOPattern& acct) {
                 // By definition, we have a UFVK for every known account.
                 auto ufvk = wallet.GetUnifiedFullViewingKeyByAccount(acct.GetAccountId());
                 // Orchard notes will not have been selected if the UFVK does not contain
                 // an Orchard key.
-                fvk = ufvk.value().GetOrchardKey().value();
+                return ufvk.value().GetOrchardKey().value();
             },
-            [&](const auto& other) {
+            [&](const auto& other) -> OrchardFullViewingKey {
                 throw std::runtime_error("SelectOVKs: Selector cannot select Orchard notes.");
             }
         });
-        assert(fvk.has_value());
 
-        internalOVK = fvk.value().ToInternalOutgoingViewingKey();
-        externalOVK = fvk.value().ToExternalOutgoingViewingKey();
+        internalOVK = fvk.ToInternalOutgoingViewingKey();
+        externalOVK = fvk.ToExternalOutgoingViewingKey();
     } else if (!spendable.saplingNoteEntries.empty()) {
-        std::optional<SaplingDiversifiableFullViewingKey> dfvk;
-        examine(selector.GetPattern(), match {
+        SaplingDiversifiableFullViewingKey dfvk = examine(selector.GetPattern(), match {
             [&](const libzcash::SaplingPaymentAddress& addr) {
                 libzcash::SaplingExtendedSpendingKey extsk;
                 assert(pwalletMain->GetSaplingExtendedSpendingKey(addr, extsk));
-                dfvk = extsk.ToXFVK();
+                return static_cast<SaplingDiversifiableFullViewingKey>(extsk.ToXFVK());
             },
             [&](const UnifiedAddress& ua) {
                 auto ufvk = pwalletMain->GetUFVKForAddress(ua);
                 // This is safe because spending key checks will have ensured that we
                 // have a UFVK corresponding to this address, and Sapling notes will
                 // not have been selected if the UFVK does not contain a Sapling key.
-                dfvk = ufvk.value().GetSaplingKey().value();
+                return ufvk.value().GetSaplingKey().value();
             },
             [&](const UnifiedFullViewingKey& ufvk) {
                 // Sapling notes will not have been selected if the UFVK does not contain
                 // a Sapling key.
-                dfvk = ufvk.GetSaplingKey().value();
+                return ufvk.GetSaplingKey().value();
             },
             [&](const AccountZTXOPattern& acct) {
                 // By definition, we have a UFVK for every known account.
                 auto ufvk = pwalletMain->GetUnifiedFullViewingKeyByAccount(acct.GetAccountId());
                 // Sapling notes will not have been selected if the UFVK does not contain
                 // a Sapling key.
-                dfvk = ufvk.value().GetSaplingKey().value();
+                return ufvk.value().GetSaplingKey().value();
             },
-            [&](const auto& other) {
+            [&](const auto& other) -> SaplingDiversifiableFullViewingKey {
                 throw std::runtime_error("SelectOVKs: Selector cannot select Sapling notes.");
             }
         });
-        assert(dfvk.has_value());
 
-        auto ovks = dfvk.value().GetOVKs();
+        auto ovks = dfvk.GetOVKs();
         internalOVK = ovks.first;
         externalOVK = ovks.second;
     } else if (!spendable.utxos.empty()) {
-        std::optional<transparent::AccountPubKey> tfvk;
-        examine(selector.GetPattern(), match {
+        transparent::AccountPubKey tfvk = examine(selector.GetPattern(), match {
             [&](const CKeyID& keyId) {
-                tfvk = pwalletMain->GetLegacyAccountKey().ToAccountPubKey();
+                return pwalletMain->GetLegacyAccountKey().ToAccountPubKey();
             },
             [&](const CScriptID& keyId) {
-                tfvk = pwalletMain->GetLegacyAccountKey().ToAccountPubKey();
+                return pwalletMain->GetLegacyAccountKey().ToAccountPubKey();
             },
             [&](const UnifiedAddress& ua) {
                 // This is safe because spending key checks will have ensured that we
                 // have a UFVK corresponding to this address, and transparent UTXOs will
                 // not have been selected if the UFVK does not contain a transparent key.
                 auto ufvk = pwalletMain->GetUFVKForAddress(ua);
-                tfvk = ufvk.value().GetTransparentKey().value();
+                return ufvk.value().GetTransparentKey().value();
             },
             [&](const UnifiedFullViewingKey& ufvk) {
                 // Transparent UTXOs will not have been selected if the UFVK does not contain
                 // a transparent key.
-                tfvk = ufvk.GetTransparentKey().value();
+                return ufvk.GetTransparentKey().value();
             },
             [&](const AccountZTXOPattern& acct) {
                 if (acct.GetAccountId() == ZCASH_LEGACY_ACCOUNT) {
-                    tfvk = pwalletMain->GetLegacyAccountKey().ToAccountPubKey();
+                    return pwalletMain->GetLegacyAccountKey().ToAccountPubKey();
                 } else {
                     // By definition, we have a UFVK for every known account.
                     auto ufvk = pwalletMain->GetUnifiedFullViewingKeyByAccount(acct.GetAccountId()).value();
                     // Transparent UTXOs will not have been selected if the UFVK does not contain
                     // a transparent key.
-                    tfvk = ufvk.GetTransparentKey().value();
+                    return ufvk.GetTransparentKey().value();
                 }
             },
-            [&](const auto& other) {
+            [&](const auto& other) -> transparent::AccountPubKey {
                 throw std::runtime_error("SelectOVKs: Selector cannot select transparent UTXOs.");
             }
         });
-        assert(tfvk.has_value());
 
-        auto ovks = tfvk.value().GetOVKsForShielding();
+        auto ovks = tfvk.GetOVKsForShielding();
         internalOVK = ovks.first;
         externalOVK = ovks.second;
     } else if (!spendable.sproutNoteEntries.empty()) {
