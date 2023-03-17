@@ -3217,7 +3217,7 @@ UniValue z_getaddressforaccount(const UniValue& params, bool fHelp)
     UniValue result(UniValue::VOBJ);
     result.pushKV("account", (uint64_t)account);
 
-    std::visit(match {
+    examine(res, match {
         [&](std::pair<libzcash::UnifiedAddress, libzcash::diversifier_index_t> addr) {
             result.pushKV("address", KeyIO(Params()).EncodePaymentAddress(addr.first));
             UniValue j;
@@ -3270,7 +3270,7 @@ UniValue z_getaddressforaccount(const UniValue& params, bool fHelp)
             }
             throw JSONRPCError(RPC_WALLET_ERROR, strErr);
         },
-    }, res);
+    });
 
     UniValue receiver_types(UniValue::VARR);
     for (const auto& receiverType : receiverTypes) {
@@ -3464,7 +3464,7 @@ UniValue z_listunifiedreceivers(const UniValue& params, bool fHelp)
 
     UniValue result(UniValue::VOBJ);
     for (const auto& receiver : ua) {
-        std::visit(match {
+        examine(receiver, match {
             [&](const libzcash::OrchardRawAddress& addr) {
                 // Create a single-receiver UA that just contains this Orchard receiver.
                 UnifiedAddress singleReceiver;
@@ -3481,7 +3481,7 @@ UniValue z_listunifiedreceivers(const UniValue& params, bool fHelp)
                 result.pushKV("p2pkh", keyIO.EncodePaymentAddress(addr));
             },
             [](auto rest) {},
-        }, receiver);
+        });
     }
     return result;
 }
@@ -3618,7 +3618,7 @@ UniValue z_listreceivedbyaddress(const UniValue& params, bool fHelp)
 
     // A non-unified address argument that is a receiver within a
     // unified address known to this wallet is not allowed.
-    if (std::visit(match {
+    if (examine(decoded.value(), match {
         [&](const CKeyID& addr) {
             return pwalletMain->FindUnifiedAddressByReceiver(addr).has_value();
          },
@@ -3636,7 +3636,7 @@ UniValue z_listreceivedbyaddress(const UniValue& params, bool fHelp)
             // We allow unified addresses themselves, which cannot recurse.
             return false;
         }
-    }, decoded.value())) {
+    })) {
         throw JSONRPCError(RPC_INVALID_PARAMETER, "The provided address is a bare receiver from a Unified Address in this wallet. Provide the full UA instead.");
     }
 
@@ -3741,7 +3741,7 @@ UniValue z_listreceivedbyaddress(const UniValue& params, bool fHelp)
         }
     };
 
-    std::visit(match {
+    examine(decoded.value(), match {
         [&](const CKeyID& addr) { push_transparent_result(addr); },
         [&](const CScriptID& addr) { push_transparent_result(addr); },
         [&](const libzcash::SproutPaymentAddress& addr) {
@@ -3778,7 +3778,7 @@ UniValue z_listreceivedbyaddress(const UniValue& params, bool fHelp)
         },
         [&](const libzcash::UnifiedAddress& addr) {
             for (const auto& receiver : addr) {
-                std::visit(match {
+                examine(receiver, match {
                     [&](const libzcash::SaplingPaymentAddress& addr) {
                         push_sapling_result(addr);
                     },
@@ -3795,10 +3795,10 @@ UniValue z_listreceivedbyaddress(const UniValue& params, bool fHelp)
                     },
                     [&](const UnknownReceiver& unknown) {}
 
-                }, receiver);
+                });
             }
         }
-    }, decoded.value());
+    });
     return result;
 }
 
@@ -3855,7 +3855,7 @@ UniValue z_getbalance(const UniValue& params, bool fHelp)
     }
 
     CAmount nBalance = 0;
-    std::visit(match {
+    examine(pa.value(), match {
         [&](const CKeyID& addr) {
             nBalance = getBalanceTaddr(addr, std::nullopt, nMinDepth, false);
         },
@@ -3887,7 +3887,7 @@ UniValue z_getbalance(const UniValue& params, bool fHelp)
                 nBalance += t.GetNoteValue();
             }
         },
-    }, pa.value());
+    });
 
     // inZat
     if (params.size() > 2 && params[2].get_bool()) {
@@ -4652,7 +4652,7 @@ size_t EstimateTxSize(
     size_t taddrRecipientCount = 0;
     size_t orchardRecipientCount = 0;
     for (const Payment& recipient : recipients) {
-        std::visit(match {
+        examine(recipient.GetAddress(), match {
             [&](const CKeyID&) {
                 taddrRecipientCount += 1;
             },
@@ -4677,7 +4677,7 @@ size_t EstimateTxSize(
                     taddrRecipientCount += 1;
                 }
             }
-        }, recipient.GetAddress());
+        });
     }
 
     bool nu5Active = Params().GetConsensus().NetworkUpgradeActive(nextBlockHeight, Consensus::UPGRADE_NU5);
@@ -4846,7 +4846,7 @@ UniValue z_sendmany(const UniValue& params, bool fHelp)
                         "Invalid parameter, memos cannot be sent to transparent addresses.");
             }
 
-            std::visit(match {
+            examine(Memo::FromHex(memoHex), match {
                 [&](MemoError err) {
                     switch (err) {
                         case MemoError::HexDecodeError:
@@ -4864,7 +4864,7 @@ UniValue z_sendmany(const UniValue& params, bool fHelp)
                 [&](Memo result) {
                     memo = result;
                 }
-            }, Memo::FromHex(memoHex));
+            });
         }
 
         UniValue av = find_value(o, "amount");
@@ -4873,7 +4873,7 @@ UniValue z_sendmany(const UniValue& params, bool fHelp)
             throw JSONRPCError(RPC_INVALID_PARAMETER, "Invalid parameter, amount must be positive");
         }
 
-        std::visit(match {
+        examine(addr.value(), match {
                 [&](const CKeyID &) {
                     tcoinbasePolicy = TransparentCoinbasePolicy::Disallow;
                 },
@@ -4885,7 +4885,7 @@ UniValue z_sendmany(const UniValue& params, bool fHelp)
                     auto preferredRecipient =
                         ua.GetPreferredRecipientAddress(chainparams.GetConsensus(), nextBlockHeight);
                     if (preferredRecipient.has_value()) {
-                        std::visit(match {
+                        examine(preferredRecipient.value(), match {
                                 [&](const CKeyID &) {
                                     tcoinbasePolicy = TransparentCoinbasePolicy::Disallow;
                                 },
@@ -4893,11 +4893,11 @@ UniValue z_sendmany(const UniValue& params, bool fHelp)
                                     tcoinbasePolicy = TransparentCoinbasePolicy::Disallow;
                                 },
                                 [](const auto &) { }
-                        }, preferredRecipient.value());
+                        });
                     }
                 },
                 [](const auto &) { }
-        }, addr.value());
+        });
 
         recipients.push_back(Payment(addr.value(), nAmount, memo));
         nTotalOut += nAmount;
@@ -4933,7 +4933,7 @@ UniValue z_sendmany(const UniValue& params, bool fHelp)
             }
 
             auto selectorAccount = pwalletMain->FindAccountForSelector(ztxoSelectorOpt.value());
-            std::visit(match {
+            examine(decoded.value(), match {
                 [&](const libzcash::UnifiedAddress& ua) {
                     if (!selectorAccount.has_value() || selectorAccount.value() == ZCASH_LEGACY_ACCOUNT) {
                         throw JSONRPCError(
@@ -4949,7 +4949,7 @@ UniValue z_sendmany(const UniValue& params, bool fHelp)
                                 "Invalid from address: is a bare receiver from a Unified Address in this wallet. Provide the UA as returned by z_getaddressforaccount instead.");
                     }
                 }
-            }, decoded.value());
+            });
 
             return ztxoSelectorOpt.value();
         }
@@ -5236,7 +5236,7 @@ UniValue z_shieldcoinbase(const UniValue& params, bool fHelp)
     auto destStr = params[1].get_str();
     auto destaddress = keyIO.DecodePaymentAddress(destStr);
     if (destaddress.has_value()) {
-        std::visit(match {
+        examine(destaddress.value(), match {
             [&](const CKeyID& addr) {
                 throw JSONRPCError(RPC_VERIFY_REJECTED, "Cannot shield coinbase output to a p2pkh address.");
             },
@@ -5260,7 +5260,7 @@ UniValue z_shieldcoinbase(const UniValue& params, bool fHelp)
                 }
                 involvesOrchard = ua.GetOrchardReceiver().has_value();
             }
-        }, destaddress.value());
+        });
     } else {
         throw JSONRPCError(RPC_INVALID_PARAMETER, string("Invalid parameter, unknown address format: ") + destStr);
     }
@@ -5514,7 +5514,7 @@ UniValue z_mergetoaddress(const UniValue& params, bool fHelp)
         } else {
             auto addr = keyIO.DecodePaymentAddress(address);
             if (addr.has_value()) {
-                std::visit(match {
+                examine(addr.value(), match {
                     [&](const CKeyID& taddr) {
                         taddrs.insert(taddr);
                         isFromNonSprout = true;
@@ -5535,7 +5535,7 @@ UniValue z_mergetoaddress(const UniValue& params, bool fHelp)
                                 RPC_INVALID_PARAMETER,
                                 "Unified addresses are not supported in z_mergetoaddress");
                     }
-                }, addr.value());
+                });
             } else {
                 throw JSONRPCError(RPC_INVALID_PARAMETER, string("Unknown address format: ") + address);
             }
@@ -5565,7 +5565,7 @@ UniValue z_mergetoaddress(const UniValue& params, bool fHelp)
     bool isToSproutZaddr = false;
     bool isToSaplingZaddr = false;
     if (destaddress.has_value()) {
-        std::visit(match {
+        examine(destaddress.value(), match {
             [&](CKeyID addr) {
                 isToTaddr = true;
             },
@@ -5587,7 +5587,7 @@ UniValue z_mergetoaddress(const UniValue& params, bool fHelp)
                         RPC_INVALID_PARAMETER,
                         "Invalid parameter, unified addresses are not yet supported.");
             }
-        }, destaddress.value());
+        });
     } else {
         throw JSONRPCError(
                 RPC_INVALID_PARAMETER,

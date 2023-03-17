@@ -72,7 +72,7 @@ PrepareTransactionResult WalletTxBuilder::PrepareTransaction(
             return result;
         };
 
-        changeAddr = std::visit(match {
+        changeAddr = examine(selector.GetPattern(), match {
             [&](const CKeyID& keyId) -> ChangeAddress {
                 auto sendTo = pwalletMain->GenerateChangeAddressForAccount(
                         sendFromAccount,
@@ -155,7 +155,7 @@ PrepareTransactionResult WalletTxBuilder::PrepareTransaction(
                         ResolvedPayment(std::nullopt, sendTo.value(), changeAmount, std::nullopt, true));
                 return sendTo.value();
             }
-        }, selector.GetPattern());
+        });
     }
 
     auto ovks = SelectOVKs(selector, spendable);
@@ -225,7 +225,7 @@ InputSelectionResult WalletTxBuilder::ResolveInputsAndPayments(
     std::vector<ResolvedPayment> resolvedPayments;
     std::optional<AddressResolutionError> resolutionError;
     for (const auto& payment : payments) {
-        std::visit(match {
+        examine(payment.GetAddress(), match {
             [&](const CKeyID& p2pkh) {
                 if (strategy.AllowRevealedRecipients()) {
                     resolvedPayments.emplace_back(
@@ -294,7 +294,7 @@ InputSelectionResult WalletTxBuilder::ResolveInputsAndPayments(
                     }
                 }
             }
-        }, payment.GetAddress());
+        });
 
         if (resolutionError.has_value()) {
             return resolutionError.value();
@@ -353,7 +353,7 @@ std::pair<uint256, uint256> WalletTxBuilder::SelectOVKs(
     uint256 externalOVK;
     if (!spendable.orchardNoteMetadata.empty()) {
         std::optional<OrchardFullViewingKey> fvk;
-        std::visit(match {
+        examine(selector.GetPattern(), match {
             [&](const UnifiedAddress& ua) {
                 auto ufvk = wallet.GetUFVKForAddress(ua);
                 // This is safe because spending key checks will have ensured that we
@@ -376,14 +376,14 @@ std::pair<uint256, uint256> WalletTxBuilder::SelectOVKs(
             [&](const auto& other) {
                 throw std::runtime_error("SelectOVKs: Selector cannot select Orchard notes.");
             }
-        }, selector.GetPattern());
+        });
         assert(fvk.has_value());
 
         internalOVK = fvk.value().ToInternalOutgoingViewingKey();
         externalOVK = fvk.value().ToExternalOutgoingViewingKey();
     } else if (!spendable.saplingNoteEntries.empty()) {
         std::optional<SaplingDiversifiableFullViewingKey> dfvk;
-        std::visit(match {
+        examine(selector.GetPattern(), match {
             [&](const libzcash::SaplingPaymentAddress& addr) {
                 libzcash::SaplingExtendedSpendingKey extsk;
                 assert(pwalletMain->GetSaplingExtendedSpendingKey(addr, extsk));
@@ -411,7 +411,7 @@ std::pair<uint256, uint256> WalletTxBuilder::SelectOVKs(
             [&](const auto& other) {
                 throw std::runtime_error("SelectOVKs: Selector cannot select Sapling notes.");
             }
-        }, selector.GetPattern());
+        });
         assert(dfvk.has_value());
 
         auto ovks = dfvk.value().GetOVKs();
@@ -419,7 +419,7 @@ std::pair<uint256, uint256> WalletTxBuilder::SelectOVKs(
         externalOVK = ovks.second;
     } else if (!spendable.utxos.empty()) {
         std::optional<transparent::AccountPubKey> tfvk;
-        std::visit(match {
+        examine(selector.GetPattern(), match {
             [&](const CKeyID& keyId) {
                 tfvk = pwalletMain->GetLegacyAccountKey().ToAccountPubKey();
             },
@@ -452,7 +452,7 @@ std::pair<uint256, uint256> WalletTxBuilder::SelectOVKs(
             [&](const auto& other) {
                 throw std::runtime_error("SelectOVKs: Selector cannot select transparent UTXOs.");
             }
-        }, selector.GetPattern());
+        });
         assert(tfvk.has_value());
 
         auto ovks = tfvk.value().GetOVKsForShielding();
@@ -604,7 +604,7 @@ TransactionBuilderResult TransactionEffects::ApproveAndBuild(
 
     // Add outputs
     for (const auto& r : payments.GetResolvedPayments()) {
-        std::visit(match {
+        examine(r.address, match {
             [&](const CKeyID& keyId) {
                 builder.AddTransparentOutput(keyId, r.amount);
             },
@@ -621,7 +621,7 @@ TransactionBuilderResult TransactionEffects::ApproveAndBuild(
                         externalOVK, addr, r.amount,
                         r.memo.has_value() ? std::optional(r.memo.value().ToBytes()) : std::nullopt);
             }
-        }, r.address);
+        });
     }
 
     // Add transparent utxos
@@ -676,14 +676,14 @@ TransactionBuilderResult TransactionEffects::ApproveAndBuild(
     }
 
     if (changeAddr.has_value()) {
-        std::visit(match {
+        examine(changeAddr.value(), match {
             [&](const SproutPaymentAddress& addr) {
                 builder.SendChangeToSprout(addr);
             },
             [&](const RecipientAddress& addr) {
                 builder.SendChangeTo(addr, internalOVK);
             }
-        }, changeAddr.value());
+        });
     }
 
     // Build the transaction
