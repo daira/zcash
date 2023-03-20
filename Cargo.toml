@@ -38,16 +38,16 @@ name = "zcashd-wallet-tool"
 path = "src/rust/bin/wallet_tool.rs"
 
 [dependencies]
-bellman = "0.13"
+bellman = "0.14"
 blake2b_simd = "1"
 blake2s_simd = "1"
-bls12_381 = "0.7"
+bls12_381 = "0.8"
 byteorder = "1"
 crossbeam-channel = "0.5"
-group = "0.12"
+group = "0.13"
 incrementalmerkletree = "0.3"
 libc = "0.2"
-jubjub = "0.9"
+jubjub = "0.10"
 memuse = "0.2"
 nonempty = "0.7"
 orchard = "0.3"
@@ -60,7 +60,7 @@ tracing-appender = "0.2"
 zcash_address = "0.2"
 zcash_encoding = "0.2"
 zcash_history = "0.3"
-zcash_note_encryption = "0.2"
+zcash_note_encryption = "0.3"
 zcash_primitives = { version = "0.10.2", features = ["temporary-zcashd", "transparent-inputs"] }
 zcash_proofs = { version = "0.10", features = ["directories"] }
 ed25519-zebra = "3"
@@ -112,3 +112,15 @@ features = ["ansi", "env-filter", "fmt", "time"]
 lto = 'thin'
 panic = 'abort'
 codegen-units = 1
+
+[patch.crates-io]
+halo2_gadgets = { git = "https://github.com/zcash/halo2.git", rev = "642924d614305d882cc122739c59144109f4bd3f" }
+halo2_proofs = { git = "https://github.com/zcash/halo2.git", rev = "642924d614305d882cc122739c59144109f4bd3f" }
+equihash = { git = "https://github.com/zcash/librustzcash.git", rev = "fcd6f00396880980e502a56373ab335889101536" }
+orchard = { git = "https://github.com/zcash/orchard.git", rev = "dca33119b4d082048a098e9fdc0c87c508ed056e" }
+zcash_address = { git = "https://github.com/zcash/librustzcash.git", rev = "fcd6f00396880980e502a56373ab335889101536" }
+zcash_encoding = { git = "https://github.com/zcash/librustzcash.git", rev = "fcd6f00396880980e502a56373ab335889101536" }
+zcash_history = { git = "https://github.com/zcash/librustzcash.git", rev = "fcd6f00396880980e502a56373ab335889101536" }
+zcash_note_encryption = { git = "https://github.com/zcash/librustzcash.git", rev = "fcd6f00396880980e502a56373ab335889101536" }
+zcash_primitives = { git = "https://github.com/zcash/librustzcash.git", rev = "fcd6f00396880980e502a56373ab335889101536" }
+zcash_proofs = { git = "https://github.com/zcash/librustzcash.git", rev = "fcd6f00396880980e502a56373ab335889101536" }
