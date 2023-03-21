@@ -104,7 +104,7 @@ PrepareTransactionResult WalletTxBuilder::PrepareTransaction(
             return addChangePayment(zufvk.GetChangeAddress(getAllowedChangePools(receiverTypes)));
         };
 
-        changeAddr = std::visit(match {
+        changeAddr = examine(selector.GetPattern(), match {
             [&](const CKeyID&) -> ChangeAddress {
                 return changeAddressForTransparentSelector({ReceiverType::P2PKH});
             },
@@ -141,7 +141,7 @@ PrepareTransactionResult WalletTxBuilder::PrepareTransaction(
                                 acct.GetAccountId(),
                                 getAllowedChangePools(acct.GetReceiverTypes())));
             }
-        }, selector.GetPattern());
+        });
     }
 
     auto ovks = SelectOVKs(selector, spendable);
@@ -211,7 +211,7 @@ InputSelectionResult WalletTxBuilder::ResolveInputsAndPayments(
     std::vector<ResolvedPayment> resolvedPayments;
     std::optional<AddressResolutionError> resolutionError;
     for (const auto& payment : payments) {
-        std::visit(match {
+        examine(payment.GetAddress(), match {
             [&](const CKeyID& p2pkh) {
                 if (strategy.AllowRevealedRecipients()) {
                     resolvedPayments.emplace_back(
@@ -284,7 +284,7 @@ InputSelectionResult WalletTxBuilder::ResolveInputsAndPayments(
                     }
                 }
             }
-        }, payment.GetAddress());
+        });
 
         if (resolutionError.has_value()) {
             return resolutionError.value();
@@ -373,7 +373,7 @@ std::pair<uint256, uint256> WalletTxBuilder::SelectOVKs(
         const ZTXOSelector& selector,
         const SpendableInputs& spendable) const
 {
-    return std::visit(match {
+    return examine(selector.GetPattern(), match {
         [&](const CKeyID& keyId) {
             return wallet.GetLegacyAccountKey().ToAccountPubKey().GetOVKsForShielding();
         },
@@ -414,7 +414,7 @@ std::pair<uint256, uint256> WalletTxBuilder::SelectOVKs(
                 return GetOVKsForUFVK(ufvk.value().ToFullViewingKey(), spendable);
             }
         },
-    }, selector.GetPattern());
+    });
 }
 
 PrivacyPolicy TransactionEffects::GetRequiredPrivacyPolicy() const
@@ -545,7 +545,7 @@ TransactionBuilderResult TransactionEffects::ApproveAndBuild(
 
     // Add outputs
     for (const auto& r : payments.GetResolvedPayments()) {
-        std::visit(match {
+        examine(r.address, match {
             [&](const CKeyID& keyId) {
                 builder.AddTransparentOutput(keyId, r.amount);
             },
@@ -562,7 +562,7 @@ TransactionBuilderResult TransactionEffects::ApproveAndBuild(
                         r.isInternal ? internalOVK : externalOVK, addr, r.amount,
                         r.memo.has_value() ? std::optional(r.memo.value().ToBytes()) : std::nullopt);
             }
-        }, r.address);
+        });
     }
 
     // Add transparent utxos
@@ -615,14 +615,14 @@ TransactionBuilderResult TransactionEffects::ApproveAndBuild(
     //       (re)calculate the change. In future, we shouldn’t rely on `TransactionBuilder` ever
     //       calculating change.
     if (changeAddr.has_value()) {
-        std::visit(match {
+        examine(changeAddr.value(), match {
             [&](const SproutPaymentAddress& addr) {
                 builder.SendChangeToSprout(addr);
             },
             [&](const RecipientAddress&) {
                 assert(totalSpend == payments.Total() + fee);
             }
-        }, changeAddr.value());
+        });
     }
 
     // Build the transaction
