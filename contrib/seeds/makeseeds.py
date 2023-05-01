@@ -3,7 +3,7 @@
 # Distributed under the MIT software license, see the accompanying
 # file COPYING or https://www.opensource.org/licenses/mit-license.php .
 #
-# Generate seeds.txt from Pieter's DNS seeder
+# Generate `seeds.txt`.
 #
 
 NSEEDS=512
