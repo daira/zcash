@@ -547,18 +547,19 @@ public:
                 consensus.vUpgrades[Consensus::UPGRADE_CANOPY].nActivationHeight, 2796000,
                 mg_addresses);
 
-            //auto nu6Activation = consensus.vUpgrades[Consensus::UPGRADE_NU6].nActivationHeight;
-            //consensus.AddZIP207FundingStream(
-            //    keyConstants,
-            //    Consensus::FS_ZIPTBD_ZCG,
-            //    nu6Activation,
-            //    nu6Activation + (12 * consensus.nFundingPeriodLength,
-            //    <FIXME>);
-            //consensus.AddZIP207LockboxStream(
-            //    keyConstants,
-            //    Consensus::FS_ZIPTBD_LOCKBOX,
-            //    nu6Activation,
-            //    nu6Activation + (12 * consensus.nFundingPeriodLength);
+            auto nu6Activation = consensus.vUpgrades[Consensus::UPGRADE_NU6].nActivationHeight;
+            std::vector<std::string> zcg_addresses(13, "t2HifwjUj9uyxr9bknR8LFuQbc98c3vkXtu");
+            consensus.AddZIP207FundingStream(
+                keyConstants,
+                Consensus::FS_ZIPTBD_ZCG,
+                nu6Activation,
+                nu6Activation + (12 * consensus.nFundingPeriodLength),
+                zcg_addresses);
+            consensus.AddZIP207LockboxStream(
+                keyConstants,
+                Consensus::FS_ZIPTBD_LOCKBOX,
+                nu6Activation,
+                nu6Activation + (12 * consensus.nFundingPeriodLength));
         }
 
         // On testnet we activate this rule 6 blocks after Blossom activation. From block 299188 and
