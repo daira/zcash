@@ -16,7 +16,7 @@ static const int PROTOCOL_VERSION = 170100;
 static const int INIT_PROTO_VERSION = 209;
 
 //! disconnect from peers older than this proto version
-static const int MIN_PEER_PROTO_VERSION = 170002;
+static const int MIN_PEER_PROTO_VERSION = 170100;
 
 //! nTime field added to CAddress, starting with this version.
 //! This can't be removed because it affects the encoding of the
@@ -34,6 +34,6 @@ static const int NO_BLOOM_VERSION = 170004;
 static const int CINV_WTX_VERSION = 170014;
 
 //! disconnect from testnet peers older than this proto version
-static const int MIN_TESTNET_PEER_PROTO_VERSION = 170040;
+static const int MIN_TESTNET_PEER_PROTO_VERSION = 170050;
 
 #endif // BITCOIN_VERSION_H
